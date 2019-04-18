@@ -8,7 +8,7 @@
  * scoring or analyzing the mission performance at the end of the flight.
  */
 
-
+#include <fstream>
 
 #include <ros/ros.h>
 
@@ -180,6 +180,16 @@ void AA241xMissionNode::loadMission() {
 	// I'm thinking each mission is its own file (e.g. m1.mission)
 	// within the file, there are N lines for N targets
 	// for each target, each line contains the GPS coords of target j
+
+
+	std::ifstream infile("id1.mission");
+
+	float n, e;
+	while (infile >> n >> e) {
+		// process pair (a,b)
+		// TODO: add this information to a data structure
+		// TODO: decide on the best data structure for this lookup
+	}
 }
 
 void AA241xMissionNode::makeMeasurement() {
