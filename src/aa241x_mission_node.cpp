@@ -51,6 +51,8 @@ private:
 	bool _in_mission = false;		// true if mission is running
 	double _mission_time = 0.0;	// time since mission started in [sec]
 
+	// mission "people"
+	std::vector<Eigen::Vector3f> _people;
 
 	float _e_offset = 0.0f;
 	float _n_offset = 0.0f;
@@ -181,14 +183,18 @@ void AA241xMissionNode::loadMission() {
 	// within the file, there are N lines for N targets
 	// for each target, each line contains the GPS coords of target j
 
+	// TODO: need to make sure that the file exists
+	// also need to decide on how we are going to publish the mission data
 
 	std::ifstream infile("id1.mission");
 
-	float n, e;
-	while (infile >> n >> e) {
+	float n, e, d;
+	while (infile >> n >> e >> d) {
 		// process pair (a,b)
 		// TODO: add this information to a data structure
 		// TODO: decide on the best data structure for this lookup
+		Eigen::Vector3f loc << n << e << d;
+		_people.push_back(loc);
 	}
 }
 
