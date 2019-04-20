@@ -9,9 +9,18 @@
  */
 
 #include <fstream>
+#include <vector>
+#include <Eigen/Dense>  // eigen functions
 
 #include <ros/ros.h>
 
+#include <geometry_msgs/PoseStamped.h>
+#include <geometry_msgs/TwistStamped.h>
+#include <sensor_msgs/NavSatFix.h>
+#include <mavros_msgs/State.h>
+
+#include <aa241x_mission/MissionState.h>
+#include <aa241x_mission/SensorMeasurement.h>
 
 
 
@@ -97,17 +106,17 @@ _mission_index(mission_index)
 
 	// subscriptions
 	_state_sub = _nh.subscribe<mavros_msgs::State>("mavros/state", 1, &AA241xMissionNode::stateCallback, this);
-	_gps_sub = nh.subscribe<sensor_msgs::NavSatFix>("/mavros/global_position/global", 1, &AA241xMissionNode::gpsCallback, this);
-	_local_pos_sub = nh.subscribe<geometry_msgs::PoseStamped>("/mavros/local_position/local", 10, &AA241xMissionNode::localPosCallback, this);
-	_gps_vel_sub = nh.subscribe<geometry_msgs::TwistStamped>("/mavros/global_position/raw/gps_vel", 1, &AA241xMissionNode::rawGPSVelCallback, this);
+	_gps_sub = _nh.subscribe<sensor_msgs::NavSatFix>("/mavros/global_position/global", 1, &AA241xMissionNode::gpsCallback, this);
+	_local_pos_sub = _nh.subscribe<geometry_msgs::PoseStamped>("/mavros/local_position/local", 10, &AA241xMissionNode::localPosCallback, this);
+	_gps_vel_sub = _nh.subscribe<geometry_msgs::TwistStamped>("/mavros/global_position/raw/gps_vel", 1, &AA241xMissionNode::rawGPSVelCallback, this);
 	// TODO: may need to subscribe to the IMU data (?)
 	// TODO: may need to subscribe to something that gives me the acceleration commands
 	// TODO: need to decide what I want to subscribe to
 
 	// publishering
-	_lake_local_pub = nh.advertise<geometry_msgs::PoseStamped>("aa241x/local_position", 10);
-	_measurement_pub = nh.advertise<aa241x_mission::SensorMeasurement>("measurement", 10);
-	_mission_state_pub = nh.advertise<aa241x_mission::MissionState>("mission_state", 10);
+	_lake_local_pub = _nh.advertise<geometry_msgs::PoseStamped>("aa241x/local_position", 10);
+	_measurement_pub = _nh.advertise<aa241x_mission::SensorMeasurement>("measurement", 10);
+	_mission_state_pub = _nh.advertise<aa241x_mission::MissionState>("mission_state", 10);
 
 	// TODO: should this node publish local position information??? or should we just use the PX4 local position info?
 	// If using the PX4 local position info, have a challenge of needing an offset...
@@ -142,7 +151,7 @@ void AA241xMissionNode::gpsCallback(const sensor_msgs::NavSatFix::ConstPtr& msg)
 
 }
 
-void localPosCallback(const geometry_msgs::PoseStamped::ConstPtr& msg) {
+void AA241xMissionNode::localPosCallback(const geometry_msgs::PoseStamped::ConstPtr& msg) {
 
 	// if the offset hasn't been computed, don't publish anything yet
 	if (!_offset_computed) {
@@ -193,7 +202,8 @@ void AA241xMissionNode::loadMission() {
 		// process pair (a,b)
 		// TODO: add this information to a data structure
 		// TODO: decide on the best data structure for this lookup
-		Eigen::Vector3f loc << n << e << d;
+		Eigen::Vector3f loc;
+		loc << n, e, d;
 		_people.push_back(loc);
 	}
 }
@@ -216,9 +226,9 @@ void AA241xMissionNode::publishMissionState() {
 
 	// TODO: add a state machine here to be able to handle the mission changes
 	if (!_in_mission) {
-		mission_state.mission_state = aa241x::MissionState::MISSION_NOT_STARTED;
+		mission_state.mission_state = aa241x_mission::MissionState::MISSION_NOT_STARTED;
 	} else {
-		mission_state.mission_state = aa241x::MissionState::MISSION_RUNNING;
+		mission_state.mission_state = aa241x_mission::MissionState::MISSION_RUNNING;
 	}
 
 	// publish the information
@@ -226,7 +236,7 @@ void AA241xMissionNode::publishMissionState() {
 }
 
 
-void AA241xMissionNode::run() {
+int AA241xMissionNode::run() {
 
 	uint8_t counter = 0;  // needed to rate limit the mission state info
 	ros::Rate rate(5);  // TODO: set this to the desired sensor rate
@@ -257,6 +267,8 @@ void AA241xMissionNode::run() {
 		rate.sleep();
 		counter++;
 	}
+
+	return EXIT_SUCCESS;
 }
 
 
