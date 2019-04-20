@@ -1,0 +1,15 @@
+<launch>
+
+	<!-- want to allow the selection of the misison index, so also have it as an argument here -->
+	<arg name="mission_index" default="1" doc="index of the desired mission to run" />
+
+	<!-- launch mavros connected to the gazebo simulator -->
+	<include file="$(find aa241x_mission)/launch/mavros_gazebo.launch" />
+
+	<!-- launch the mission node -->
+	<include file="$(find aa241x_mission)/launch/mission.launch" >
+		<arg name="mission_index" value="$(arg mission_index)" />
+	</include>
+</launch>
+
+

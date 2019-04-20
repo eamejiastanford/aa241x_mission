@@ -24,6 +24,8 @@
 #include <aa241x_mission/MissionState.h>
 #include <aa241x_mission/SensorMeasurement.h>
 
+#include "geodetic_trans.hpp"
+
 
 
 class MissionNode {
@@ -151,6 +153,15 @@ void MissionNode::gpsCallback(const sensor_msgs::NavSatFix::ConstPtr& msg) {
 	if (_offset_computed || msg->status.status < 0) {
 		return;
 	}
+
+	// compute the offset using the geodetic transformations
+	double lat = msg->latitude;
+	double lon = msg->longitude;
+	float alt = msg->altitude;
+	geodetic_trans::lla2enu(_lake_center_lat, _lake_center_lon, _lake_center_alt,
+							lat, lon, alt, &_e_offset, &_n_offset, &_u_offset);
+
+	ROS_INFO("offset computed as: (%0.2f, %0.2f, %0.2f)", _e_offset, _n_offset, _u_offset);
 
 	// NOTE: this assumes that we are catching (0,0) of the local coordinate
 	// system correctly
