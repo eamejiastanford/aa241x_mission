@@ -9,7 +9,9 @@
  */
 
 #include <fstream>
+#include <iostream>
 #include <vector>
+#include <string>
 #include <Eigen/Dense>  // eigen functions
 
 #include <ros/ros.h>
@@ -33,7 +35,7 @@ public:
 	// TODO: decide how the settings will be passed -> I think I want them as
 	// inputs to the constructor instead of having the constructor pull the
 	// private NH data
-	AA241xMissionNode(int mission_index);
+	AA241xMissionNode(int mission_index, std::string mission_file);
 
 
 	// TODO: any services to broadcast (NOTE: need to figure out what services might be neded)
@@ -48,13 +50,20 @@ private:
 
 	// mission settings
 	int _mission_index = 0;
+	std::string _mission_file;
+
+	float _max_alt = 120;	// maximum allowed altitude [m]
+
+	// sensor setting
 	float _sensor_min_alt = 10.0;  // [m]
 	float _sensor_diameter_mult = 0.1;  // TODO: height * _sensor_d_mult = diameter FOV
 
+
 	// TODO: populate these values
-	double _lake_center_lat = 0.0;
-	double _lake_center_lon = 0.0;
-	double _lake_center_alt = 0.0;
+	double _lake_center_lat = 37.4224444;	// [deg]
+	double _lake_center_lon = -122.1760917;	// [deg]
+	float _lake_center_alt = 40.0;			// [m]
+	float _lake_radius = 170.0f;			// in bound radius from the center [m]
 
 	// mission monitoring
 	bool _in_mission = false;		// true if mission is running
@@ -100,9 +109,12 @@ private:
 
 
 
-AA241xMissionNode::AA241xMissionNode(int mission_index) :
-_mission_index(mission_index)
+AA241xMissionNode::AA241xMissionNode(int mission_index, std::string mission_file) :
+_mission_index(mission_index),
+_mission_file(mission_file)
 {
+	// load the mission
+	loadMission();
 
 	// subscriptions
 	_state_sub = _nh.subscribe<mavros_msgs::State>("mavros/state", 1, &AA241xMissionNode::stateCallback, this);
@@ -194,8 +206,10 @@ void AA241xMissionNode::loadMission() {
 
 	// TODO: need to make sure that the file exists
 	// also need to decide on how we are going to publish the mission data
-
-	std::ifstream infile("id1.mission");
+	std::ifstream infile(_mission_file);
+	if (!infile.good()) {
+		ROS_ERROR("mission file does not exist!");
+	}
 
 	float n, e, d;
 	while (infile >> n >> e >> d) {
@@ -205,6 +219,8 @@ void AA241xMissionNode::loadMission() {
 		Eigen::Vector3f loc;
 		loc << n, e, d;
 		_people.push_back(loc);
+
+		ROS_INFO("adding person at: (%0.2f %0.2f %0.2f)", n, e, d);
 	}
 }
 
@@ -277,18 +293,22 @@ int AA241xMissionNode::run() {
 int main(int argc, char **argv) {
 
 	// initialize th enode
-	ros::init(argc, argv, "aa241x_mission_node");
+	ros::init(argc, argv, "mission_node");
 
 	// get parameters from the launch file which define some mission
 	// settings
 	ros::NodeHandle private_nh("~");
 	// TODO: determine settings
 	int mission_index = 0;
+	std::string mission_file;
 
 	private_nh.param("mission_index", mission_index, 0);
+	if (!private_nh.getParam("mission_file", mission_file)) {
+		ROS_ERROR("failed to get mission file");
+	}
 
 	// create the node
-	AA241xMissionNode node(mission_index);
+	AA241xMissionNode node(mission_index, mission_file);
 
 	// run the node
 	return node.run();

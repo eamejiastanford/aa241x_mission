@@ -1,0 +1,10 @@
+<launch>
+
+	<arg name="mission_index" default="2" doc="index of the desired mission to run" />
+
+	<node pkg="aa241x_mission" type="mission_node" name="mission_node" output="screen">
+		<param name="mission_index" value="$(arg mission_index)" />
+		<param name="mission_file" value="$(find aa241x_mission)/missions/id$(arg mission_index).mission" type="str" />
+	</node>
+
+</launch>
