@@ -9,3 +9,9 @@ uint8 MISSION_FAILED_OOB = 3
 uint8 MISSION_FAILED_OTHER = 8
 
 uint8 mission_state
+
+# the offset data between the lake lag coordinates and the vehicle local
+# position information
+float32 e_offset
+float32 n_offset
+float32 u_offset
