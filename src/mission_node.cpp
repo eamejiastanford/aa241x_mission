@@ -26,7 +26,7 @@
 
 
 
-class AA241xMissionNode {
+class MissionNode {
 
 
 public:
@@ -35,7 +35,7 @@ public:
 	// TODO: decide how the settings will be passed -> I think I want them as
 	// inputs to the constructor instead of having the constructor pull the
 	// private NH data
-	AA241xMissionNode(int mission_index, std::string mission_file);
+	MissionNode(int mission_index, std::string mission_file);
 
 
 	// TODO: any services to broadcast (NOTE: need to figure out what services might be neded)
@@ -109,7 +109,7 @@ private:
 
 
 
-AA241xMissionNode::AA241xMissionNode(int mission_index, std::string mission_file) :
+MissionNode::MissionNode(int mission_index, std::string mission_file) :
 _mission_index(mission_index),
 _mission_file(mission_file)
 {
@@ -117,10 +117,10 @@ _mission_file(mission_file)
 	loadMission();
 
 	// subscriptions
-	_state_sub = _nh.subscribe<mavros_msgs::State>("mavros/state", 1, &AA241xMissionNode::stateCallback, this);
-	_gps_sub = _nh.subscribe<sensor_msgs::NavSatFix>("/mavros/global_position/global", 1, &AA241xMissionNode::gpsCallback, this);
-	_local_pos_sub = _nh.subscribe<geometry_msgs::PoseStamped>("/mavros/local_position/local", 10, &AA241xMissionNode::localPosCallback, this);
-	_gps_vel_sub = _nh.subscribe<geometry_msgs::TwistStamped>("/mavros/global_position/raw/gps_vel", 1, &AA241xMissionNode::rawGPSVelCallback, this);
+	_state_sub = _nh.subscribe<mavros_msgs::State>("mavros/state", 1, &MissionNode::stateCallback, this);
+	_gps_sub = _nh.subscribe<sensor_msgs::NavSatFix>("/mavros/global_position/global", 1, &MissionNode::gpsCallback, this);
+	_local_pos_sub = _nh.subscribe<geometry_msgs::PoseStamped>("/mavros/local_position/local", 10, &MissionNode::localPosCallback, this);
+	_gps_vel_sub = _nh.subscribe<geometry_msgs::TwistStamped>("/mavros/global_position/raw/gps_vel", 1, &MissionNode::rawGPSVelCallback, this);
 	// TODO: may need to subscribe to the IMU data (?)
 	// TODO: may need to subscribe to something that gives me the acceleration commands
 	// TODO: need to decide what I want to subscribe to
@@ -138,13 +138,13 @@ _mission_file(mission_file)
 	// TODO: should see if PX4 has a way to define the GPS coordinate for which to compute local position
 }
 
-void AA241xMissionNode::stateCallback(const mavros_msgs::State::ConstPtr& msg) {
+void MissionNode::stateCallback(const mavros_msgs::State::ConstPtr& msg) {
 	_current_state = *msg;
 }
 
 
 // need to be listening to the raw GPS data for knowing the reference point
-void AA241xMissionNode::gpsCallback(const sensor_msgs::NavSatFix::ConstPtr& msg) {
+void MissionNode::gpsCallback(const sensor_msgs::NavSatFix::ConstPtr& msg) {
 
 	// if we've already handled the offset computation, or don't have a fix yet
 	// then continue
@@ -163,7 +163,7 @@ void AA241xMissionNode::gpsCallback(const sensor_msgs::NavSatFix::ConstPtr& msg)
 
 }
 
-void AA241xMissionNode::localPosCallback(const geometry_msgs::PoseStamped::ConstPtr& msg) {
+void MissionNode::localPosCallback(const geometry_msgs::PoseStamped::ConstPtr& msg) {
 
 	// if the offset hasn't been computed, don't publish anything yet
 	if (!_offset_computed) {
@@ -191,12 +191,12 @@ void AA241xMissionNode::localPosCallback(const geometry_msgs::PoseStamped::Const
 }
 
 // need to be listening to the raw GPS velocity for the initialization
-void AA241xMissionNode::rawGPSVelCallback(const geometry_msgs::TwistStamped::ConstPtr& msg) {
+void MissionNode::rawGPSVelCallback(const geometry_msgs::TwistStamped::ConstPtr& msg) {
 	// TODO: decide if actually even need the velocity information
 }
 
 
-void AA241xMissionNode::loadMission() {
+void MissionNode::loadMission() {
 	// TODO: this should load the mission data from a file somewhere
 	// need to decide on the format of the mission data
 	//
@@ -224,7 +224,7 @@ void AA241xMissionNode::loadMission() {
 	}
 }
 
-void AA241xMissionNode::makeMeasurement() {
+void MissionNode::makeMeasurement() {
 
 	// TODO: calculate FOV of the sensor
 	// TODO: check if there are any people in view
@@ -234,7 +234,7 @@ void AA241xMissionNode::makeMeasurement() {
 }
 
 
-void AA241xMissionNode::publishMissionState() {
+void MissionNode::publishMissionState() {
 
 	// populate the topic data
 	aa241x_mission::MissionState mission_state;
@@ -252,7 +252,7 @@ void AA241xMissionNode::publishMissionState() {
 }
 
 
-int AA241xMissionNode::run() {
+int MissionNode::run() {
 
 	uint8_t counter = 0;  // needed to rate limit the mission state info
 	ros::Rate rate(5);  // TODO: set this to the desired sensor rate
@@ -308,7 +308,7 @@ int main(int argc, char **argv) {
 	}
 
 	// create the node
-	AA241xMissionNode node(mission_index, mission_file);
+	MissionNode node(mission_index, mission_file);
 
 	// run the node
 	return node.run();
