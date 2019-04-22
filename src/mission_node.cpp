@@ -59,9 +59,9 @@ private:
 	float _max_alt = 120;	// maximum allowed altitude [m]
 
 	// sensor setting
-	float _sensor_min_alt = 10.0;  // [m]
-	float _sensor_diameter_mult = 0.1;  // TODO: height * _sensor_d_mult = diameter FOV
-	float _sensor_stddev = 5;	// TODO: populate this number correctly
+	float _sensor_min_alt = 10.0;		// [m]
+	float _sensor_diameter_mult = 0.1;	// TODO: get the correct equation
+	float _sensor_stddev = 5;			// TODO: populate this number correctly
 
 	// lake specific parameters
 	double _lake_center_lat = 37.4224444;	// [deg]
@@ -71,45 +71,59 @@ private:
 
 	// mission monitoring
 	bool _in_mission = false;		// true if mission is running
-	double _mission_time = 0.0;	// time since mission started in [sec]
+	double _mission_time = 0.0;		// time since mission started in [sec]
 
 	// mission "people"
-	std::vector<Eigen::Vector3f> _people;
+	std::vector<Eigen::Vector3f> _people;	// the positions of the people in the world
 
 	// random sampling stuff
 	std::normal_distribution<float> _pos_distribution;
 	std::default_random_engine _generator;
 
 	// offsets to the local NED frame used by PX4
-	float _e_offset = nan;
-	float _n_offset = nan;
-	float _u_offset = nan;
+	float _e_offset = NAN;
+	float _n_offset = NAN;
+	float _u_offset = NAN;
 	bool _offset_computed = false;
-	geometry_msgs::PoseStamped _current_local_position;
-	mavros_msgs::State _current_state;
+
+	// data
+	geometry_msgs::PoseStamped _current_local_position;		// most recent local position info
+	mavros_msgs::State _current_state;						// most recent state info
 
 	// subscribers
-	// TODO: figure out the desired subscriptions
-	ros::Subscriber _state_sub;
-	ros::Subscriber _gps_sub;
-	ros::Subscriber _local_pos_sub;
+	ros::Subscriber _state_sub;		// pixhawk state
+	ros::Subscriber _gps_sub;		// filtered GPS data from the pixhawk
+	ros::Subscriber _local_pos_sub;	// pixhawk local position
 
 	// publishers
-	// TODO: determine what data should be published
-	ros::Publisher _measurement_pub;
-	ros::Publisher _mission_state_pub;
+	ros::Publisher _measurement_pub;	// simulated sensor "measurement"
+	ros::Publisher _mission_state_pub;	// the current mission state
 
 
 	// callbacks
 	void stateCallback(const mavros_msgs::State::ConstPtr& msg);
 	void gpsCallback(const sensor_msgs::NavSatFix::ConstPtr& msg);
 	void localPosCallback(const geometry_msgs::PoseStamped::ConstPtr& msg);
-	void rawGPSVelCallback(const geometry_msgs::TwistStamped::ConstPtr& msg);
-
 
 	// helpers
+
+	/**
+	 * read in the mission file and load the positions of the people
+	 */
 	void loadMission();
+
+	/**
+	 * virtualization of the sensor
+	 * makes the "measurement" to the people and publishes the data of those in
+	 * view
+	 */
 	void makeMeasurement();
+
+	/**
+	 * publish the current mission state information
+	 * this includes the frame offset from the local ENU frame to the lake lag
+	 * ENU frame
+	 */
 	void publishMissionState();
 
 };
@@ -129,26 +143,17 @@ _generator(ros::Time::now().toSec())
 	_state_sub = _nh.subscribe<mavros_msgs::State>("mavros/state", 1, &MissionNode::stateCallback, this);
 	_gps_sub = _nh.subscribe<sensor_msgs::NavSatFix>("/mavros/global_position/global", 1, &MissionNode::gpsCallback, this);
 	_local_pos_sub = _nh.subscribe<geometry_msgs::PoseStamped>("/mavros/local_position/pose", 10, &MissionNode::localPosCallback, this);
-	// TODO: may need to subscribe to the IMU data (?)
-	// TODO: may need to subscribe to something that gives me the acceleration commands
-	// TODO: need to decide what I want to subscribe to
 
-	// publishering
+	// advertise publishers
 	_measurement_pub = _nh.advertise<aa241x_mission::SensorMeasurement>("measurement", 10);
 	_mission_state_pub = _nh.advertise<aa241x_mission::MissionState>("mission_state", 10);
-
-	// TODO: should this node publish local position information??? or should we just use the PX4 local position info?
-	// If using the PX4 local position info, have a challenge of needing an offset...
-	//
-	// in the past we've always had a defined NED frame that is the same every time a vehicle is flown in lake lag...
-	//
-	// TODO: should see if PX4 has a way to define the GPS coordinate for which to compute local position
 }
 
 void MissionNode::stateCallback(const mavros_msgs::State::ConstPtr& msg) {
 	_current_state = *msg;
 
-	// check the mission conditions -> TODO: determine if there are other conditions
+	// check the mission conditions
+	// TODO: determine if there are other conditions
 	bool new_state = (_current_state.mode != "OFFBOARD");
 	if (new_state != _in_mission) {
 		publishMissionState();
@@ -156,9 +161,8 @@ void MissionNode::stateCallback(const mavros_msgs::State::ConstPtr& msg) {
 	_in_mission = new_state;
 }
 
-
-// need to be listening to the raw GPS data for knowing the reference point
 void MissionNode::gpsCallback(const sensor_msgs::NavSatFix::ConstPtr& msg) {
+	// need to be listening to the raw GPS data for knowing the reference point
 
 	// if we've already handled the offset computation, or don't have a fix yet
 	// then continue
@@ -205,31 +209,23 @@ void MissionNode::localPosCallback(const geometry_msgs::PoseStamped::ConstPtr& m
 	_current_local_position = local_pos;
 }
 
-
 void MissionNode::loadMission() {
-	// TODO: this should load the mission data from a file somewhere
-	// need to decide on the format of the mission data
-	//
-	// I'm thinking each mission is its own file (e.g. m1.mission)
-	// within the file, there are N lines for N targets
-	// for each target, each line contains the GPS coords of target j
 
-	// TODO: need to make sure that the file exists
-	// also need to decide on how we are going to publish the mission data
+	// open the mission file (display an error if the file does not exist)
 	std::ifstream infile(_mission_file);
 	if (!infile.good()) {
 		ROS_ERROR("mission file does not exist!");
 	}
 
+	// import the data from the mission file into the people vector
 	float n, e, d;
 	while (infile >> n >> e >> d) {
-		// process pair (a,b)
-		// TODO: add this information to a data structure
-		// TODO: decide on the best data structure for this lookup
+		// each person is represented by a 3 vector (NED)
 		Eigen::Vector3f loc;
 		loc << n, e, d;
 		_people.push_back(loc);
 
+		// DEBUG
 		ROS_INFO("adding person at: (%0.2f %0.2f %0.2f)", n, e, d);
 	}
 }
@@ -250,10 +246,9 @@ void MissionNode::makeMeasurement() {
 	aa241x_mission::SensorMeasurement meas;
 	meas.num_measurements = 0;
 
-
 	// check if there are any people in view
 	for (uint8_t i = 0; i < _people.size(); i++) {
-		Eigen::Vector3f pos = _people[i]
+		Eigen::Vector3f pos = _people[i];
 
 		// for each person in view, get a position measurement
 		if ((current_pos - pos).norm() <= range) {
@@ -272,9 +267,7 @@ void MissionNode::makeMeasurement() {
 
 	// publish a list of position measurements or an empty measurement
 	_measurement_pub.publish(meas);
-
 }
-
 
 void MissionNode::publishMissionState() {
 
@@ -298,11 +291,10 @@ void MissionNode::publishMissionState() {
 	_mission_state_pub.publish(mission_state);
 }
 
-
 int MissionNode::run() {
 
-	uint8_t counter = 0;  // needed to rate limit the mission state info
-	ros::Rate rate(5);  // TODO: set this to the desired sensor rate
+	uint8_t counter = 0;	// needed to rate limit the mission state info
+	ros::Rate rate(5);		// TODO: set this to the desired sensor rate
 	while (ros::ok()) {
 
 		// sensor is disabled until we are in the mission
@@ -320,7 +312,6 @@ int MissionNode::run() {
 		// make a measurement
 		makeMeasurement();
 
-
 		// TODO: publish the mission state information
 		// TODO: maybe rate limit this information to a lower rate (e.g. 0.5 Hz)
 		// NOTE: if reduce rate, will want to publish the state immediately when it changes
@@ -335,8 +326,6 @@ int MissionNode::run() {
 
 	return EXIT_SUCCESS;
 }
-
-
 
 
 int main(int argc, char **argv) {
