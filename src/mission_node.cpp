@@ -12,6 +12,8 @@
 #include <iostream>
 #include <vector>
 #include <string>
+#include <cmath>
+#include <random>
 #include <Eigen/Dense>  // eigen functions
 
 #include <ros/ros.h>
@@ -59,9 +61,9 @@ private:
 	// sensor setting
 	float _sensor_min_alt = 10.0;  // [m]
 	float _sensor_diameter_mult = 0.1;  // TODO: height * _sensor_d_mult = diameter FOV
+	float _sensor_stddev = 5;	// TODO: populate this number correctly
 
-
-	// TODO: populate these values
+	// lake specific parameters
 	double _lake_center_lat = 37.4224444;	// [deg]
 	double _lake_center_lon = -122.1760917;	// [deg]
 	float _lake_center_alt = 40.0;			// [m]
@@ -74,9 +76,14 @@ private:
 	// mission "people"
 	std::vector<Eigen::Vector3f> _people;
 
-	float _e_offset = 0.0f;
-	float _n_offset = 0.0f;
-	float _u_offset = 0.0f;
+	// random sampling stuff
+	std::normal_distribution<float> _pos_distribution;
+	std::default_random_engine _generator;
+
+	// offsets to the local NED frame used by PX4
+	float _e_offset = nan;
+	float _n_offset = nan;
+	float _u_offset = nan;
 	bool _offset_computed = false;
 	geometry_msgs::PoseStamped _current_local_position;
 	mavros_msgs::State _current_state;
@@ -86,11 +93,9 @@ private:
 	ros::Subscriber _state_sub;
 	ros::Subscriber _gps_sub;
 	ros::Subscriber _local_pos_sub;
-	ros::Subscriber _gps_vel_sub;
 
 	// publishers
 	// TODO: determine what data should be published
-	ros::Publisher _lake_local_pub;
 	ros::Publisher _measurement_pub;
 	ros::Publisher _mission_state_pub;
 
@@ -113,7 +118,9 @@ private:
 
 MissionNode::MissionNode(int mission_index, std::string mission_file) :
 _mission_index(mission_index),
-_mission_file(mission_file)
+_mission_file(mission_file),
+_pos_distribution(0, _sensor_stddev),
+_generator(ros::Time::now().toSec())
 {
 	// load the mission
 	loadMission();
@@ -121,14 +128,12 @@ _mission_file(mission_file)
 	// subscriptions
 	_state_sub = _nh.subscribe<mavros_msgs::State>("mavros/state", 1, &MissionNode::stateCallback, this);
 	_gps_sub = _nh.subscribe<sensor_msgs::NavSatFix>("/mavros/global_position/global", 1, &MissionNode::gpsCallback, this);
-	_local_pos_sub = _nh.subscribe<geometry_msgs::PoseStamped>("/mavros/local_position/local", 10, &MissionNode::localPosCallback, this);
-	_gps_vel_sub = _nh.subscribe<geometry_msgs::TwistStamped>("/mavros/global_position/raw/gps_vel", 1, &MissionNode::rawGPSVelCallback, this);
+	_local_pos_sub = _nh.subscribe<geometry_msgs::PoseStamped>("/mavros/local_position/pose", 10, &MissionNode::localPosCallback, this);
 	// TODO: may need to subscribe to the IMU data (?)
 	// TODO: may need to subscribe to something that gives me the acceleration commands
 	// TODO: need to decide what I want to subscribe to
 
 	// publishering
-	_lake_local_pub = _nh.advertise<geometry_msgs::PoseStamped>("aa241x/local_position", 10);
 	_measurement_pub = _nh.advertise<aa241x_mission::SensorMeasurement>("measurement", 10);
 	_mission_state_pub = _nh.advertise<aa241x_mission::MissionState>("mission_state", 10);
 
@@ -142,6 +147,13 @@ _mission_file(mission_file)
 
 void MissionNode::stateCallback(const mavros_msgs::State::ConstPtr& msg) {
 	_current_state = *msg;
+
+	// check the mission conditions -> TODO: determine if there are other conditions
+	bool new_state = (_current_state.mode != "OFFBOARD");
+	if (new_state != _in_mission) {
+		publishMissionState();
+	}
+	_in_mission = new_state;
 }
 
 
@@ -161,13 +173,15 @@ void MissionNode::gpsCallback(const sensor_msgs::NavSatFix::ConstPtr& msg) {
 	geodetic_trans::lla2enu(_lake_center_lat, _lake_center_lon, _lake_center_alt,
 							lat, lon, alt, &_e_offset, &_n_offset, &_u_offset);
 
+	// DEBUG
 	ROS_INFO("offset computed as: (%0.2f, %0.2f, %0.2f)", _e_offset, _n_offset, _u_offset);
 
 	// NOTE: this assumes that we are catching (0,0) of the local coordinate
 	// system correctly
 	// TODO: properly test this assumption
 
-	// TODO: compute the offset
+	// publish the mission state with this information
+	publishMissionState();
 
 	// make as computed
 	_offset_computed = true;
@@ -187,23 +201,8 @@ void MissionNode::localPosCallback(const geometry_msgs::PoseStamped::ConstPtr& m
 	local_pos.pose.position.y += _n_offset;
 	local_pos.pose.position.z += _u_offset;
 
-	// publish the data
-	_lake_local_pub.publish(local_pos);
-
 	// set the current position information to be the lake local position
 	_current_local_position = local_pos;
-
-	// TODO: check the mission conditions
-	bool new_state = (_current_state.mode != "OFFBOARD");
-	if (new_state != _in_mission) {
-		publishMissionState();
-	}
-	_in_mission = new_state;
-}
-
-// need to be listening to the raw GPS velocity for the initialization
-void MissionNode::rawGPSVelCallback(const geometry_msgs::TwistStamped::ConstPtr& msg) {
-	// TODO: decide if actually even need the velocity information
 }
 
 
@@ -238,9 +237,41 @@ void MissionNode::loadMission() {
 void MissionNode::makeMeasurement() {
 
 	// TODO: calculate FOV of the sensor
-	// TODO: check if there are any people in view
-	// TODO: for each person in view, get a position measurement
-	// TODO: publish a list of position measurements or an empty measurement
+	float range = 10;  // TODO: actually calculate this value...
+
+	// put the current local position (ENU) into an NED Egien vector
+	float n = _current_local_position.pose.position.y;
+	float e = _current_local_position.pose.position.x;
+	float d = -_current_local_position.pose.position.z;
+	Eigen::Vector3f current_pos;
+	current_pos << n, e, d;
+
+	// the measurement message
+	aa241x_mission::SensorMeasurement meas;
+	meas.num_measurements = 0;
+
+
+	// check if there are any people in view
+	for (uint8_t i = 0; i < _people.size(); i++) {
+		Eigen::Vector3f pos = _people[i]
+
+		// for each person in view, get a position measurement
+		if ((current_pos - pos).norm() <= range) {
+
+			// get the N and E coordinates of the measurement
+			n = _pos_distribution(_generator) + pos(0);
+			e = _pos_distribution(_generator) + pos(1);
+
+			// add to the message
+			meas.num_measurements++;
+			meas.n.push_back(n);
+			meas.e.push_back(e);
+			meas.u.push_back(0);  // TODO: determine if actually want this
+		}
+	}
+
+	// publish a list of position measurements or an empty measurement
+	_measurement_pub.publish(meas);
 
 }
 
@@ -257,6 +288,11 @@ void MissionNode::publishMissionState() {
 	} else {
 		mission_state.mission_state = aa241x_mission::MissionState::MISSION_RUNNING;
 	}
+
+	// add the offset information
+	mission_state.e_offset = _e_offset;
+	mission_state.n_offset = _n_offset;
+	mission_state.u_offset = _u_offset;
 
 	// publish the information
 	_mission_state_pub.publish(mission_state);
@@ -278,8 +314,10 @@ int MissionNode::run() {
 			continue;
 		}
 
+		// TODO: check to see if there are any condition for which a measurement
+		// would not occur
 
-		// TODO: make a measurement
+		// make a measurement
 		makeMeasurement();
 
 
