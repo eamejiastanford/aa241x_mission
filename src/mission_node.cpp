@@ -154,7 +154,7 @@ void MissionNode::stateCallback(const mavros_msgs::State::ConstPtr& msg) {
 
 	// check the mission conditions
 	// TODO: determine if there are other conditions
-	bool new_state = (_current_state.mode != "OFFBOARD");
+	bool new_state = (_current_state.mode == "OFFBOARD");
 	if (new_state != _in_mission) {
 		publishMissionState();
 	}
@@ -233,7 +233,7 @@ void MissionNode::loadMission() {
 void MissionNode::makeMeasurement() {
 
 	// TODO: calculate FOV of the sensor
-	float range = 10;  // TODO: actually calculate this value...
+	float range = 60;  // TODO: actually calculate this value...
 
 	// put the current local position (ENU) into an NED Egien vector
 	float n = _current_local_position.pose.position.y;
@@ -251,7 +251,9 @@ void MissionNode::makeMeasurement() {
 		Eigen::Vector3f pos = _people[i];
 
 		// for each person in view, get a position measurement
+		ROS_INFO("range: %0.2f", (current_pos - pos).norm());
 		if ((current_pos - pos).norm() <= range) {
+			ROS_INFO("seen person %d", i);
 
 			// get the N and E coordinates of the measurement
 			n = _pos_distribution(_generator) + pos(0);
@@ -299,7 +301,8 @@ int MissionNode::run() {
 
 		// sensor is disabled until we are in the mission
 		// also doesn't work below a given altitude
-		if (!_in_mission || _current_local_position.pose.position.z < _sensor_min_alt) {
+		ROS_INFO("height: %0.2f", _current_local_position.pose.position.z);
+		if (!_in_mission) { //} || _current_local_position.pose.position.z < _sensor_min_alt) {
 			// run the ros components
 			ros::spinOnce();
 			rate.sleep();
