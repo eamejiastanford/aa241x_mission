@@ -261,6 +261,7 @@ void MissionNode::makeMeasurement() {
 
 			// add to the message
 			meas.num_measurements++;
+			meas.id.push_back(i);
 			meas.n.push_back(n);
 			meas.e.push_back(e);
 			meas.u.push_back(0);  // TODO: determine if actually want this
