@@ -59,15 +59,18 @@ private:
 	float _max_alt = 120;	// maximum allowed altitude [m]
 
 	// sensor setting
-	float _sensor_min_alt = 10.0;		// [m]
-	float _sensor_diameter_mult = 0.1;	// TODO: get the correct equation
-	float _sensor_stddev = 5;			// TODO: populate this number correctly
+	float _sensor_min_h = 10.0;			// min height AGL for the sensor [m]
+	float _sensor_max_h = 30.0f;		// max height AGL for the sensor [m]
+	float _sensor_d_mult = 5.0f/7.0f;	// multiplier for the equation (*h)
+	float _sensor_d_offset = 28.57;		// [m]
+	float _sensor_stddev_a = 2;				// min std dev (at height of 50m) [m]
+	float _sensor_stddev_b = 1.0f/50.0f;	// scale factor on h [m]
 
 	// lake specific parameters
 	double _lake_center_lat = 37.4224444;	// [deg]
 	double _lake_center_lon = -122.1760917;	// [deg]
 	float _lake_center_alt = 40.0;			// [m]
-	float _lake_radius = 170.0f;			// in bound radius from the center [m]
+	float _lake_radius = 160.0f;			// in bound radius from the center [m]
 
 	// mission monitoring
 	bool _in_mission = false;		// true if mission is running
@@ -77,7 +80,6 @@ private:
 	std::vector<Eigen::Vector3f> _people;	// the positions of the people in the world
 
 	// random sampling stuff
-	std::normal_distribution<float> _pos_distribution;
 	std::default_random_engine _generator;
 
 	// offsets to the local NED frame used by PX4
@@ -133,7 +135,6 @@ private:
 MissionNode::MissionNode(int mission_index, std::string mission_file) :
 _mission_index(mission_index),
 _mission_file(mission_file),
-_pos_distribution(0, _sensor_stddev),
 _generator(ros::Time::now().toSec())
 {
 	// load the mission
@@ -232,15 +233,22 @@ void MissionNode::loadMission() {
 
 void MissionNode::makeMeasurement() {
 
-	// TODO: calculate FOV of the sensor
-	float range = 60;  // TODO: actually calculate this value...
-
 	// put the current local position (ENU) into an NED Egien vector
 	float n = _current_local_position.pose.position.y;
 	float e = _current_local_position.pose.position.x;
 	float d = -_current_local_position.pose.position.z;
 	Eigen::Vector3f current_pos;
 	current_pos << n, e, d;
+
+	// get the height information into a local variable for readibility
+	float h = _current_local_position.pose.position.z;
+
+	// calculate FOV of the sensor
+	float radius = _sensor_d_mult * h + _sensor_d_offset;	// [m]
+
+	// get the sensor distribution based on the equation
+	float sensor_std = _sensor_stddev_a + h/_sensor_stddev_b;
+	std::normal_distribution<float> pos_distribution(0, sensor_std);
 
 	// the measurement message
 	aa241x_mission::SensorMeasurement meas;
@@ -251,13 +259,13 @@ void MissionNode::makeMeasurement() {
 		Eigen::Vector3f pos = _people[i];
 
 		// for each person in view, get a position measurement
-		ROS_INFO("range: %0.2f", (current_pos - pos).norm());
-		if ((current_pos - pos).norm() <= range) {
+		ROS_INFO("radius: %0.2f", (current_pos - pos).norm());
+		if ((current_pos - pos).norm() <= radius) {
 			ROS_INFO("seen person %d", i);
 
 			// get the N and E coordinates of the measurement
-			n = _pos_distribution(_generator) + pos(0);
-			e = _pos_distribution(_generator) + pos(1);
+			n = pos_distribution(_generator) + pos(0);
+			e = pos_distribution(_generator) + pos(1);
 
 			// add to the message
 			meas.num_measurements++;
@@ -297,32 +305,25 @@ void MissionNode::publishMissionState() {
 int MissionNode::run() {
 
 	uint8_t counter = 0;	// needed to rate limit the mission state info
-	ros::Rate rate(5);		// TODO: set this to the desired sensor rate
+	ros::Rate rate(1);		// run the loop at 1Hz, which allows mission state at 0.5Hz and measurement at 1/3Hz
 	while (ros::ok()) {
 
-		// sensor is disabled until we are in the mission
-		// also doesn't work below a given altitude
+		// make a measurement at 1/3 Hz (and if the mission conditions are met)
+		float h = _current_local_position.pose.position.z;
 		ROS_INFO("height: %0.2f", _current_local_position.pose.position.z);
-		if (!_in_mission) { //} || _current_local_position.pose.position.z < _sensor_min_alt) {
-			// run the ros components
-			ros::spinOnce();
-			rate.sleep();
-			continue;
+		if (_in_mission && h >= _sensor_min_h && h <= _sensor_max_h && counter % 3 == 0) {
+			makeMeasurement();
 		}
 
-		// TODO: check to see if there are any condition for which a measurement
-		// would not occur
-
-		// make a measurement
-		makeMeasurement();
-
-		// TODO: publish the mission state information
-		// TODO: maybe rate limit this information to a lower rate (e.g. 0.5 Hz)
-		// NOTE: if reduce rate, will want to publish the state immediately when it changes
-		if (counter % 10 == 0) {
+		// publish the mission state information
+		// rate limit this information to a lower rate (e.g. 0.5 Hz)
+		// NOTE: anything that changes the values in the state will cause the
+		// state to be published so that critical data is sent immediately
+		if (counter % 2 == 0) {
 			publishMissionState();
 		}
 
+		// ros handling + increasing the counter to rate limit topics
 		ros::spinOnce();
 		rate.sleep();
 		counter++;
