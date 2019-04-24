@@ -67,9 +67,10 @@ private:
 	float _sensor_stddev_b = 1.0f/50.0f;	// scale factor on h [m]
 
 	// lake specific parameters
-	double _lake_center_lat = 37.4224444;	// [deg]
-	double _lake_center_lon = -122.1760917;	// [deg]
-	float _lake_center_alt = 40.0;			// [m]
+	double _lake_ctr_lat = 37.4224444;		// [deg]
+	double _lake_ctr_lon = -122.1760917;	// [deg]
+	float _lake_ctr_alt = 40.0;				// AMSL [m]
+	float _lake_ctr_alt_wgs84 = _lake_ctr_alt - 32.060;	// need WGS84 ellipsoid height for GPS data in ROS [m]
 	float _lake_radius = 160.0f;			// in bound radius from the center [m]
 
 	// mission monitoring
@@ -86,7 +87,7 @@ private:
 	float _e_offset = NAN;
 	float _n_offset = NAN;
 	float _u_offset = NAN;
-	bool _offset_computed = false;
+	bool _lake_offset_computed = false;
 
 	// data
 	geometry_msgs::PoseStamped _current_local_position;		// most recent local position info
@@ -167,7 +168,7 @@ void MissionNode::gpsCallback(const sensor_msgs::NavSatFix::ConstPtr& msg) {
 
 	// if we've already handled the offset computation, or don't have a fix yet
 	// then continue
-	if (_offset_computed || msg->status.status < 0) {
+	if (_lake_offset_computed || msg->status.status < 0) {
 		return;
 	}
 
@@ -175,7 +176,7 @@ void MissionNode::gpsCallback(const sensor_msgs::NavSatFix::ConstPtr& msg) {
 	double lat = msg->latitude;
 	double lon = msg->longitude;
 	float alt = msg->altitude;
-	geodetic_trans::lla2enu(_lake_center_lat, _lake_center_lon, _lake_center_alt,
+	geodetic_trans::lla2enu(_lake_ctr_lat, _lake_ctr_lon, _lake_ctr_alt_wgs84,
 							lat, lon, alt, &_e_offset, &_n_offset, &_u_offset);
 
 	// DEBUG
@@ -189,14 +190,14 @@ void MissionNode::gpsCallback(const sensor_msgs::NavSatFix::ConstPtr& msg) {
 	publishMissionState();
 
 	// make as computed
-	_offset_computed = true;
+	_lake_offset_computed = true;
 
 }
 
 void MissionNode::localPosCallback(const geometry_msgs::PoseStamped::ConstPtr& msg) {
 
 	// if the offset hasn't been computed, don't publish anything yet
-	if (!_offset_computed) {
+	if (!_lake_offset_computed) {
 		return;
 	}
 
@@ -252,6 +253,7 @@ void MissionNode::makeMeasurement() {
 
 	// the measurement message
 	aa241x_mission::SensorMeasurement meas;
+	meas.header.stamp = ros::Time::now();
 	meas.num_measurements = 0;
 
 	// check if there are any people in view
@@ -259,9 +261,7 @@ void MissionNode::makeMeasurement() {
 		Eigen::Vector3f pos = _people[i];
 
 		// for each person in view, get a position measurement
-		ROS_INFO("radius: %0.2f", (current_pos - pos).norm());
 		if ((current_pos - pos).norm() <= radius) {
-			ROS_INFO("seen person %d", i);
 
 			// get the N and E coordinates of the measurement
 			n = pos_distribution(_generator) + pos(0);
@@ -284,6 +284,7 @@ void MissionNode::publishMissionState() {
 
 	// populate the topic data
 	aa241x_mission::MissionState mission_state;
+	mission_state.header.stamp = ros::Time::now();
 	mission_state.mission_time = _mission_time;
 
 	// TODO: add a state machine here to be able to handle the mission changes
@@ -310,7 +311,6 @@ int MissionNode::run() {
 
 		// make a measurement at 1/3 Hz (and if the mission conditions are met)
 		float h = _current_local_position.pose.position.z;
-		ROS_INFO("height: %0.2f", _current_local_position.pose.position.z);
 		if (_in_mission && h >= _sensor_min_h && h <= _sensor_max_h && counter % 3 == 0) {
 			makeMeasurement();
 		}
