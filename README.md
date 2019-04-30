@@ -1,6 +1,14 @@
 # AA241x Mission #
 
-This package contains the nodes to control the mission for Spring 2019's AA241x.
+This package contains the nodes to control the mission for Spring 2019's AA241x.  This README is broken down into the following sections:
+
+ - [Getting Started](#getting-started) - to help with getting you up and running with the mission.
+
+ - [Publishers / Subscribers](#publishers--subscribers) - more detailed explanation of the topic and information the mission publishes and subscribes to.
+
+ - [Rules and Equations](#rules-and-equations) - a summary of the rules and equations that define the Spring 2019 AA241x Mission
+
+ - [General Hints](#general-hints) - some additional hints and useful resources for working with ROS and the catkin environment
 
 ## Getting Started ##
 
@@ -122,16 +130,6 @@ All the settings and behavior of the mission is outlined in the class presentati
 TODO: recap the rules / defining equations
 
 
-## ROS Hints ##
-
-For a more detailed explanation of ROS, the elements of a package, and some of the code elements, check out the [ROS Tutorials page](http://wiki.ros.org/ROS/Tutorials) that contains a lot of very useful information (tutorials 2-6, 8, 10, and 11 should be read).  In addition to the tutorials, an effort has been made to comment the code to help explain what some of the elements are doing.
-
-
-## Catkin Make Hints ##
-
-TODO: describe how to add a message to a package.
-
-
 ## Mission Files ##
 
 Each mission is defined by a `.mission` file in the `missions/` directory.  The `.mission` files contain the (North, East) coordinates of each of the people located throughout Lake Lag for a given mission.  The file structure is as follows:
@@ -141,3 +139,15 @@ Each mission is defined by a `.mission` file in the `missions/` directory.  The 
  - positions can be as integers or as decimal values, positive or negative
 
 Each file must begin with `id` and then be followed by a number (e.g. `id1`) that is treated as the mission index number.  This mission index number can be set as a launch file parameter for the mission launch file or a node level argument for the mission node (depending on how you choose to start the mission).
+
+
+## General Hints ##
+
+### ROS Hints ###
+
+For a more detailed explanation of ROS, the elements of a package, and some of the code elements, check out the [ROS Tutorials page](http://wiki.ros.org/ROS/Tutorials) that contains a lot of very useful information (tutorials 2-6, 8, 10, and 11 should be read).  In addition to the tutorials, an effort has been made to comment the code to help explain what some of the elements are doing.
+
+
+### Catkin Make Hints ###
+
+TODO: describe how to add a message to a package.
