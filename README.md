@@ -174,3 +174,18 @@ For a more detailed explanation of ROS, the elements of a package, and some of t
 ### Catkin Make Hints ###
 
 You may find that you will want to have some custom messages of your own.  If that is the case, make sure to read through [this tutorial](http://wiki.ros.org/ROS/Tutorials/CreatingMsgAndSrv) on creating and using custom messages.
+
+
+## Troubleshooting ##
+
+Here are some tips for common problems that you might run into.
+
+### Unable to Connect to Pixhawk ###
+
+Make sure that your user is part of the `dialout` group.  You can check this by typing the command `groups` and ensuring that `dialout` is listed in the group.  If it is node, add yourself to the `dialout` group with the following command:
+
+```sh
+sudo usermod -a -G dialout aa241x
+```
+
+**Note:** in this case the username is `aa241x`, but if you are working with a different username, make sure to adjust that accordingly.
