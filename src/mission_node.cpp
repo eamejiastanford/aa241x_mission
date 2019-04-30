@@ -149,7 +149,7 @@ _generator(ros::Time::now().toSec())
 	_state_sub = _nh.subscribe<mavros_msgs::State>("mavros/state", 1, &MissionNode::stateCallback, this);
 	_gps_sub = _nh.subscribe<sensor_msgs::NavSatFix>("/mavros/global_position/global", 1, &MissionNode::gpsCallback, this);
 	_local_pos_sub = _nh.subscribe<geometry_msgs::PoseStamped>("/mavros/local_position/pose", 10, &MissionNode::localPosCallback, this);
-	_person_found_sub = _nh.subscribe<geometry_msgs::PoseStamped>("person_found", 10, &MissionNode::personFoundCallback, this);
+	_person_found_sub = _nh.subscribe<aa241x_mission::PersonEstimate>("person_found", 10, &MissionNode::personFoundCallback, this);
 
 	// advertise publishers
 	_measurement_pub = _nh.advertise<aa241x_mission::SensorMeasurement>("measurement", 10);
