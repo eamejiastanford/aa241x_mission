@@ -78,7 +78,7 @@ private:
 	double _mission_time = 0.0;		// time since mission started in [sec]
 
 	// mission "people"
-	std::vector<Eigen::Vector3f> _people;	// the positions of the people in the world
+	std::vector<Eigen::Vector2f> _people;	// the positions of the people in the world
 
 	// random sampling stuff
 	std::default_random_engine _generator;
@@ -220,15 +220,15 @@ void MissionNode::loadMission() {
 	}
 
 	// import the data from the mission file into the people vector
-	float n, e, d;
-	while (infile >> n >> e >> d) {
+	float n, e;
+	while (infile >> n >> e) {
 		// each person is represented by a 3 vector (NED)
-		Eigen::Vector3f loc;
-		loc << n, e, d;
+		Eigen::Vector2f loc;
+		loc << n, e;
 		_people.push_back(loc);
 
 		// DEBUG
-		ROS_INFO("adding person at: (%0.2f %0.2f %0.2f)", n, e, d);
+		ROS_INFO("adding person at: (%0.2f %0.2f)", n, e);
 	}
 }
 
@@ -237,9 +237,8 @@ void MissionNode::makeMeasurement() {
 	// put the current local position (ENU) into an NED Egien vector
 	float n = _current_local_position.pose.position.y;
 	float e = _current_local_position.pose.position.x;
-	float d = -_current_local_position.pose.position.z;
-	Eigen::Vector3f current_pos;
-	current_pos << n, e, d;
+	Eigen::Vector2f current_pos;
+	current_pos << n, e;
 
 	// get the height information into a local variable for readibility
 	float h = _current_local_position.pose.position.z;
@@ -258,7 +257,7 @@ void MissionNode::makeMeasurement() {
 
 	// check if there are any people in view
 	for (uint8_t i = 0; i < _people.size(); i++) {
-		Eigen::Vector3f pos = _people[i];
+		Eigen::Vector2f pos = _people[i];
 
 		// for each person in view, get a position measurement
 		if ((current_pos - pos).norm() <= radius) {
@@ -272,7 +271,6 @@ void MissionNode::makeMeasurement() {
 			meas.id.push_back(i);
 			meas.n.push_back(n);
 			meas.e.push_back(e);
-			meas.u.push_back(0);  // TODO: determine if actually want this
 		}
 	}
 
