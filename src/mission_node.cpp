@@ -60,8 +60,8 @@ private:
 	float _max_alt = 120;	// maximum allowed altitude [m]
 
 	// sensor setting
-	float _sensor_min_h = 10.0;			// min height AGL for the sensor [m]
-	float _sensor_max_h = 30.0f;		// max height AGL for the sensor [m]
+	float _sensor_min_h = 30.0;			// min height AGL for the sensor [m]
+	float _sensor_max_h = 100.0f;		// max height AGL for the sensor [m]
 	float _sensor_d_mult = 5.0f/7.0f;	// multiplier for the equation (*h)
 	float _sensor_d_offset = 28.57;		// [m]
 	float _sensor_stddev_a = 2;				// min std dev (at height of 50m) [m]
@@ -256,7 +256,7 @@ void MissionNode::makeMeasurement() {
 	float radius = (_sensor_d_mult * h + _sensor_d_offset) / 2.0f;	// [m]
 
 	// get the sensor distribution based on the equation
-	float sensor_std = _sensor_stddev_a + h/_sensor_stddev_b;
+	float sensor_std = _sensor_stddev_a + h * _sensor_stddev_b;
 	std::normal_distribution<float> pos_distribution(0, sensor_std);
 
 	// the measurement message
