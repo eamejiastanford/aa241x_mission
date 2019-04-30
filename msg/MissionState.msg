@@ -1,15 +1,13 @@
-# General mission related information to keep
-# track of the state the AA241x handler has on the
-# mission.  Additionally contains specific details
-# related to the management of the AA241x mission
-# (namely offset to Lake Lag coordinate and mission score)
+# General mission related information to keep track of the state the AA241x
+# handler has on the mission.  Additionally contains specific details related to
+# the management of the AA241x mission (namely offset to Lake Lag coordinate and
+# mission score)
 
-# standard header containing the ROS timestamp information
-# for the creation of the data
+# standard header containing the ROS timestamp information for the creation of
+# the data
 std_msgs/Header header
 
-# the current mission time in [sec] as computed
-# from the start of the mission
+# the current mission time in [sec] as computed from the start of the mission
 int32 mission_time
 
 # some enums for the mission state

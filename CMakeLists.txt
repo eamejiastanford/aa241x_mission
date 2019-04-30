@@ -56,6 +56,7 @@ add_message_files(
   FILES
   MissionState.msg
   SensorMeasurement.msg
+  PersonEstimate.msg
 )
 
 ## Generate services in the 'srv' folder

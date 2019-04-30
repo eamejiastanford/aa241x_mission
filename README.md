@@ -125,9 +125,32 @@ The mission node subscribes to the following AA241x Mission related topics:
 
 ## Rules and Equations ##
 
-All the settings and behavior of the mission is outlined in the class presentation and this package merely implements those rules.
+All the settings and behavior of the mission is outlined in the class presentation and this package merely implements those rules.  Here is a quick recap on some of the more important metric:
 
-TODO: recap the rules / defining equations
+### Sensor ###
+
+The "sensor" is simulated by the `aa241x_mission` node.  When the drone is within the given mission area, the node will automatically publish the results of the sensor at the specified rate.  The sensor's performance is defined by the following parameters:
+
+ - **Field of View** - The diameter of the field of view of the sensor is given by the following equation: `diameter = 5/7 * h + 28.57` where `h` is the height above ground as defined by the Lake Lag coordinate frame and is bound by `[30, 100]`.
+
+ - **Rate** - The sensor data is published automatically every 3 seconds (1/3 Hz) to the `measurement` topic and contains the information for all the people in view at the time of the measurement.
+
+ - **Noise** - The sensor will return the position of all the people in view with Gaussian noise with a standard deviation of `sigma = 2 + h/50` meters where `h` is the height above ground as defined by the Lake Lag coordinate frame.
+
+
+### Bounds ###
+
+The bounds to the mission area are given as follows:
+
+ - the diameter of the allowed mission area is `320 m` centered on `(37.4224444, -122.1760917)` (the origin of the Lake Lag coordinate frame)
+
+ - the maximum allowed altitude is `100 m` and the minimum altitude at which the sensor will operate is `30 m`
+
+ - a violation of either the diameter bound (going outside of the Lake Lag area) or the maximum altitude bound will result in a score of `0`
+
+### Objective ###
+
+Your mission objective is to locate as many people as you can within Lake Lag to better than `1 m` accuracy.  To make an estimate of a person's location, you will publish that estimate to the `person_estimate` topic which will allow the mission node to score you live (and allow logging of the data for post processing if needed).  **Note:** only the last estimate will be used, so it is important you timestamp the data or else the first estimate will be the one that is used by the mission score calculator.
 
 
 ## Mission Files ##
@@ -150,4 +173,4 @@ For a more detailed explanation of ROS, the elements of a package, and some of t
 
 ### Catkin Make Hints ###
 
-TODO: describe how to add a message to a package.
+You may find that you will want to have some custom messages of your own.  If that is the case, make sure to read through [this tutorial](http://wiki.ros.org/ROS/Tutorials/CreatingMsgAndSrv) on creating and using custom messages.

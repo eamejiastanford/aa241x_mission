@@ -244,7 +244,7 @@ void MissionNode::makeMeasurement() {
 	float h = _current_local_position.pose.position.z;
 
 	// calculate FOV of the sensor
-	float radius = _sensor_d_mult * h + _sensor_d_offset;	// [m]
+	float radius = (_sensor_d_mult * h + _sensor_d_offset) / 2.0f;	// [m]
 
 	// get the sensor distribution based on the equation
 	float sensor_std = _sensor_stddev_a + h/_sensor_stddev_b;
