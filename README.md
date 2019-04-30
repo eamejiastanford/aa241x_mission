@@ -6,37 +6,32 @@ This package contains the nodes to control the mission for Spring 2019's AA241x.
 
 The following sections will help you get started with the AA241x Mission and using the `aa241x_mission` node and support launch files:
  - [running the mission](#running-the-mission) - how to run the mission node to run the mission related logic as defined in class and [summarized below](#rules-and-equations)
+
  - [including the mission](#including-the-mission) - how to include the mission launch handling into your own launch files.
+
  - [communicating with PX4](#communicating-with-px4) - how to start the MavROS node for communication with PX4 on either the Pixhawk 4 or in simulation with gazebo.
 
 ### Running the Mission ###
 
-TODO: describe how to use the launch files within the mission package.
+The AA241x Mission management is contained in a single node (at the moment) and can be started either with the `rosrun` command to start just the node, or it can be started with the `mission.launch` launch file using `roslaunch`.
+
+To start the mission with `roslaunch`:
 
 ```sh
 cd ~/catkin_ws/
 source devel/setup.bash
 roslaunch aa241x_mission mission.launch
 ```
-Has a single parameter: the mission index that defines the set of people that are loaded into the world.  To understand the mission file definition, [see the mission file definition section below](#mission-files).
+
+The mission node has a single parameter that can be adjusted: the `mission_index`, which specifies which of the [mission files](#mission-files) to load for the given flight.  This parameter is also exposed through the launch file as a launch file argument.  For example, the following example specifies the `mission_index` argument to be `1` using `roslaunch`:
 
 ```sh
-cd ~/catkin_ws/
-source devel/setup.bash
 roslaunch aa241x_mission mission.launch mission_index:=1
 ```
 
-helper for launching the mission and the connection to the simulation:
+#### Including the Mission ####
 
-```sh
-cd ~/catkin_ws/
-source devel/setup.bash
-roslaunch aa241x_mission mission_sim.launch
-```
-
-### Including the Mission ###
-
-TODO: describe how to include the mission into a launch file.
+You may find that you will want to create your own custom launch files to launch all the nodes you may need for successfully executing all parts of the AA241x Mission.  The `mission.launch` file can be included in your own launch file by using the `<include>` tag:
 
 ```xml
 <include file="$(find aa241x_mission)/launch/mission.launch" >
@@ -44,11 +39,15 @@ TODO: describe how to include the mission into a launch file.
 </include>
 ```
 
+**Note:** the launch file arguments can also be specified with the `<include>` tag as shown above with the `mission_index` argument being specified to a given value.
+
 ### Communicating with PX4 ###
 
 This package contains 2 helper launch files for connection to PX4 with both the Pixhawk 4 hardware and the Gazebo software-in-the-loop simulation.  The details on using and including those launch files are below.
 
 #### MavROS to Pixhawk ####
+
+To launch the MavROS node connected to the physical Pixhawk 4, use the `mavros_pixhawk.launch` file:
 
 ```sh
 cd ~/catkin_ws/
@@ -56,6 +55,7 @@ source devel/setup.bash
 roslaunch aa241x_mission mavros_pixhawk.launch
 ```
 
+Once again, this launch file can be integrated directly into any custom launch files you create with the following include:
 
 ```xml
 <include file="$(find aa241x_mission)/launch/mavros_pixhawk.launch" />
@@ -63,14 +63,24 @@ roslaunch aa241x_mission mavros_pixhawk.launch
 
 #### MavROS to Gazebo ####
 
+The connection to the software-in-the-loop simulation of PX4 and the Gazebo environment, use the `mavros_gazebo.launch` file:
+
 ```sh
 cd ~/catkin_ws/
 source devel/setup.bash
 roslaunch aa241x_mission mavros_gazebo.launch
 ```
 
+Once again, this launch file can be integrated directly into any custom launch files you create with the following include:
+
 ```xml
 <include file="$(find aa241x_mission)/launch/mavros_gazebo.launch" />
+```
+
+To demonstrate the inclusion of a launch file within another launch file, the package contains an example launch file called `mission_sim.launch` that launches both the mission and the connection to the Gazebo simulation.  It can be run like any other launch file:
+
+```sh
+roslaunch aa241x_mission mission_sim.launch
 ```
 
 ## Publishers / Subscribers ##
@@ -124,3 +134,10 @@ TODO: describe how to add a message to a package.
 
 ## Mission Files ##
 
+Each mission is defined by a `.mission` file in the `missions/` directory.  The `.mission` files contain the (North, East) coordinates of each of the people located throughout Lake Lag for a given mission.  The file structure is as follows:
+ - each line contains the `North East` location of a single person (with only a single space between the North component and the East component)
+ - there can be as many lines as desired
+ - there should be no empty lines in the file or any comments in the file
+ - positions can be as integers or as decimal values, positive or negative
+
+Each file must begin with `id` and then be followed by a number (e.g. `id1`) that is treated as the mission index number.  This mission index number can be set as a launch file parameter for the mission launch file or a node level argument for the mission node (depending on how you choose to start the mission).
