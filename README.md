@@ -117,7 +117,7 @@ TODO: describe the publishers
 
 The mission node subscribes to the following AA241x Mission related topics:
 
- - `person_estimate` - this topic, of type [`aa241x_mission::PersonEstimate`](https://github.com/aa241x/aa241x_mission/blob/master/msg/PersonEstimate.msg) contains the timestamped (North, East) position estimate of a declared found person.  The fields are:
+ - `person_found` - this topic, of type [`aa241x_mission::PersonEstimate`](https://github.com/aa241x/aa241x_mission/blob/master/msg/PersonEstimate.msg) contains the timestamped (North, East) position estimate of a declared found person.  The fields are:
      + `header` - standard header containing the ROS timestamp information for the time of the estimate
      + `id` - the id of the person for this estimate
      + `n` - the North coordinate of the measurement in [m] in the Lake Lag ENU frame
@@ -150,7 +150,7 @@ The bounds to the mission area are given as follows:
 
 ### Objective ###
 
-Your mission objective is to locate as many people as you can within Lake Lag to better than `1 m` accuracy.  To make an estimate of a person's location, you will publish that estimate to the `person_estimate` topic which will allow the mission node to score you live (and allow logging of the data for post processing if needed).  **Note:** only the last estimate will be used, so it is important you timestamp the data or else the first estimate will be the one that is used by the mission score calculator.
+Your mission objective is to locate as many people as you can within Lake Lag to better than `1 m` accuracy.  To make an estimate of a person's location, you will publish that estimate to the `person_found` topic which will allow the mission node to score you live (and allow logging of the data for post processing if needed).  **Note:** only the last estimate will be used, so it is important you timestamp the data or else the first estimate will be the one that is used by the mission score calculator.
 
 
 ## Mission Files ##

@@ -25,6 +25,7 @@
 
 #include <aa241x_mission/MissionState.h>
 #include <aa241x_mission/SensorMeasurement.h>
+#include <aa241x_mission/PersonEstimate.h>
 
 #include "geodetic_trans.hpp"
 
@@ -76,6 +77,7 @@ private:
 	// mission monitoring
 	bool _in_mission = false;		// true if mission is running
 	double _mission_time = 0.0;		// time since mission started in [sec]
+	float _mission_score = 0.0;		// the current score
 
 	// mission "people"
 	std::vector<Eigen::Vector2f> _people;	// the positions of the people in the world
@@ -94,9 +96,10 @@ private:
 	mavros_msgs::State _current_state;						// most recent state info
 
 	// subscribers
-	ros::Subscriber _state_sub;		// pixhawk state
-	ros::Subscriber _gps_sub;		// filtered GPS data from the pixhawk
-	ros::Subscriber _local_pos_sub;	// pixhawk local position
+	ros::Subscriber _state_sub;			// pixhawk state
+	ros::Subscriber _gps_sub;			// filtered GPS data from the pixhawk
+	ros::Subscriber _local_pos_sub;		// pixhawk local position
+	ros::Subscriber _person_found_sub;	// location of the found individual
 
 	// publishers
 	ros::Publisher _measurement_pub;	// simulated sensor "measurement"
@@ -107,6 +110,7 @@ private:
 	void stateCallback(const mavros_msgs::State::ConstPtr& msg);
 	void gpsCallback(const sensor_msgs::NavSatFix::ConstPtr& msg);
 	void localPosCallback(const geometry_msgs::PoseStamped::ConstPtr& msg);
+	void personFoundCallback(const aa241x_mission::PersonEstimate::ConstPtr& msg);
 
 	// helpers
 
@@ -145,6 +149,7 @@ _generator(ros::Time::now().toSec())
 	_state_sub = _nh.subscribe<mavros_msgs::State>("mavros/state", 1, &MissionNode::stateCallback, this);
 	_gps_sub = _nh.subscribe<sensor_msgs::NavSatFix>("/mavros/global_position/global", 1, &MissionNode::gpsCallback, this);
 	_local_pos_sub = _nh.subscribe<geometry_msgs::PoseStamped>("/mavros/local_position/pose", 10, &MissionNode::localPosCallback, this);
+	_person_found_sub = _nh.subscribe<geometry_msgs::PoseStamped>("person_found", 10, &MissionNode::personFoundCallback, this);
 
 	// advertise publishers
 	_measurement_pub = _nh.advertise<aa241x_mission::SensorMeasurement>("measurement", 10);
@@ -209,6 +214,10 @@ void MissionNode::localPosCallback(const geometry_msgs::PoseStamped::ConstPtr& m
 
 	// set the current position information to be the lake local position
 	_current_local_position = local_pos;
+}
+
+void MissionNode::personFoundCallback(const aa241x_mission::PersonEstimate::ConstPtr& msg) {
+	// TODO: update the score
 }
 
 void MissionNode::loadMission() {
@@ -296,6 +305,9 @@ void MissionNode::publishMissionState() {
 	mission_state.e_offset = _e_offset;
 	mission_state.n_offset = _n_offset;
 	mission_state.u_offset = _u_offset;
+
+	// the current score
+	mission_state.score = _mission_score;
 
 	// publish the information
 	_mission_state_pub.publish(mission_state);
