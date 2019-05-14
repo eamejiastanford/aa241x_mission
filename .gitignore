@@ -1,0 +1,3 @@
+# ignore all new entries to the missions directory
+# this will allow students to create their own missions without conflict
+missions/*

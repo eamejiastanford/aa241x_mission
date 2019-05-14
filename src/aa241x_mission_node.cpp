@@ -25,6 +25,7 @@
 
 #include <aa241x_mission/MissionState.h>
 #include <aa241x_mission/SensorMeasurement.h>
+#include <aa241x_mission/PersonEstimate.h>
 
 #include "geodetic_trans.hpp"
 
@@ -63,8 +64,8 @@ private:
 	float _max_alt = 120;	// maximum allowed altitude [m]
 
 	// sensor setting
-	float _sensor_min_h = 10.0;			// min height AGL for the sensor [m]
-	float _sensor_max_h = 30.0f;		// max height AGL for the sensor [m]
+	float _sensor_min_h = 30.0;			// min height AGL for the sensor [m]
+	float _sensor_max_h = 100.0f;		// max height AGL for the sensor [m]
 	float _sensor_d_mult = 5.0f/7.0f;	// multiplier for the equation (*h)
 	float _sensor_d_offset = 28.57;		// [m]
 	float _sensor_stddev_a = 2;				// min std dev (at height of 50m) [m]
@@ -80,9 +81,10 @@ private:
 	// mission monitoring
 	bool _in_mission = false;		// true if mission is running
 	double _mission_time = 0.0;		// time since mission started in [sec]
+	float _mission_score = 0.0;		// the current score
 
 	// mission "people"
-	std::vector<Eigen::Vector3f> _people;	// the positions of the people in the world
+	std::vector<Eigen::Vector2f> _people;	// the positions of the people in the world
 
 	// random sampling stuff
 	std::default_random_engine _generator;
@@ -98,9 +100,10 @@ private:
 	mavros_msgs::State _current_state;						// most recent state info
 
 	// subscribers
-	ros::Subscriber _state_sub;		// pixhawk state
-	ros::Subscriber _gps_sub;		// filtered GPS data from the pixhawk
-	ros::Subscriber _local_pos_sub;	// pixhawk local position
+	ros::Subscriber _state_sub;			// pixhawk state
+	ros::Subscriber _gps_sub;			// filtered GPS data from the pixhawk
+	ros::Subscriber _local_pos_sub;		// pixhawk local position
+	ros::Subscriber _person_found_sub;	// location of the found individual
 
 	// publishers
 	ros::Publisher _measurement_pub;	// simulated sensor "measurement"
@@ -111,6 +114,7 @@ private:
 	void stateCallback(const mavros_msgs::State::ConstPtr& msg);
 	void gpsCallback(const sensor_msgs::NavSatFix::ConstPtr& msg);
 	void localPosCallback(const geometry_msgs::PoseStamped::ConstPtr& msg);
+	void personFoundCallback(const aa241x_mission::PersonEstimate::ConstPtr& msg);
 
 	// helpers
 
@@ -149,6 +153,7 @@ _generator(ros::Time::now().toSec())
 	_state_sub = _nh.subscribe<mavros_msgs::State>("mavros/state", 1, &MissionNode::stateCallback, this);
 	_gps_sub = _nh.subscribe<sensor_msgs::NavSatFix>("/mavros/global_position/global", 1, &MissionNode::gpsCallback, this);
 	_local_pos_sub = _nh.subscribe<geometry_msgs::PoseStamped>("/mavros/local_position/pose", 10, &MissionNode::localPosCallback, this);
+	_person_found_sub = _nh.subscribe<aa241x_mission::PersonEstimate>("person_found", 10, &MissionNode::personFoundCallback, this);
 
 	// advertise publishers
 	_measurement_pub = _nh.advertise<aa241x_mission::SensorMeasurement>("measurement", 10);
@@ -215,6 +220,10 @@ void MissionNode::localPosCallback(const geometry_msgs::PoseStamped::ConstPtr& m
 	_current_local_position = local_pos;
 }
 
+void MissionNode::personFoundCallback(const aa241x_mission::PersonEstimate::ConstPtr& msg) {
+	// TODO: update the score
+}
+
 void MissionNode::loadMission() {
 
 	// open the mission file (display an error if the file does not exist)
@@ -224,15 +233,15 @@ void MissionNode::loadMission() {
 	}
 
 	// import the data from the mission file into the people vector
-	float n, e, d;
-	while (infile >> n >> e >> d) {
+	float n, e;
+	while (infile >> n >> e) {
 		// each person is represented by a 3 vector (NED)
-		Eigen::Vector3f loc;
-		loc << n, e, d;
+		Eigen::Vector2f loc;
+		loc << n, e;
 		_people.push_back(loc);
 
 		// DEBUG
-		ROS_INFO("adding person at: (%0.2f %0.2f %0.2f)", n, e, d);
+		ROS_INFO("adding person at: (%0.2f %0.2f)", n, e);
 	}
 }
 
@@ -241,18 +250,17 @@ void MissionNode::makeMeasurement() {
 	// put the current local position (ENU) into an NED Egien vector
 	float n = _current_local_position.pose.position.y;
 	float e = _current_local_position.pose.position.x;
-	float d = -_current_local_position.pose.position.z;
-	Eigen::Vector3f current_pos;
-	current_pos << n, e, d;
+	Eigen::Vector2f current_pos;
+	current_pos << n, e;
 
 	// get the height information into a local variable for readibility
 	float h = _current_local_position.pose.position.z;
 
 	// calculate FOV of the sensor
-	float radius = _sensor_d_mult * h + _sensor_d_offset;	// [m]
+	float radius = (_sensor_d_mult * h + _sensor_d_offset) / 2.0f;	// [m]
 
 	// get the sensor distribution based on the equation
-	float sensor_std = _sensor_stddev_a + h/_sensor_stddev_b;
+	float sensor_std = _sensor_stddev_a + h * _sensor_stddev_b;
 	std::normal_distribution<float> pos_distribution(0, sensor_std);
 
 	// the measurement message
@@ -262,7 +270,7 @@ void MissionNode::makeMeasurement() {
 
 	// check if there are any people in view
 	for (uint8_t i = 0; i < _people.size(); i++) {
-		Eigen::Vector3f pos = _people[i];
+		Eigen::Vector2f pos = _people[i];
 
 		// for each person in view, get a position measurement
 		if ((current_pos - pos).norm() <= radius) {
@@ -276,7 +284,6 @@ void MissionNode::makeMeasurement() {
 			meas.id.push_back(i);
 			meas.n.push_back(n);
 			meas.e.push_back(e);
-			meas.u.push_back(0);  // TODO: determine if actually want this
 		}
 	}
 
@@ -302,6 +309,9 @@ void MissionNode::publishMissionState() {
 	mission_state.e_offset = _e_offset;
 	mission_state.n_offset = _n_offset;
 	mission_state.u_offset = _u_offset;
+
+	// the current score
+	mission_state.score = _mission_score;
 
 	// publish the information
 	_mission_state_pub.publish(mission_state);
