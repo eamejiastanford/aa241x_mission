@@ -44,6 +44,10 @@ public:
 
 	// TODO: any services to broadcast (NOTE: need to figure out what services might be neded)
 
+	// TODO: need to remember the proper syntax for this
+	// but this should be a service to compute the Lake Lag ENU position of a given GPS position
+	gpsToLakeLagENUService();
+
 	// the main function to run the node
 	int run();
 
@@ -330,6 +334,24 @@ int MissionNode::run() {
 	}
 
 	return EXIT_SUCCESS;
+}
+
+
+void MissionNode::gpsToLakeLagENUService() {
+
+	// given a gps lat, lon, alt point
+	// need to convert it to the Lake Lag frame ENU coordinate
+
+	float lat = 0.0f;	// TODO: read these from the service request
+	float lon = 0.0f;
+	float alt = 0.0f;
+	float pos_e, pos_n, pos_u;
+
+	geodetic_trans::lla2enu(_lake_ctr_lat, _lake_ctr_lon, _lake_ctr_alt_wgs84,
+							lat, lon, alt, &pos_e, &pose_n, &pos_u);
+
+	// TODO: set the service response to be populated with pos_e _n and _u
+
 }
 
 
