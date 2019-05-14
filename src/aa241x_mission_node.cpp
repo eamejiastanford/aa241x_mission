@@ -26,6 +26,7 @@
 #include <aa241x_mission/MissionState.h>
 #include <aa241x_mission/SensorMeasurement.h>
 #include <aa241x_mission/PersonEstimate.h>
+#include <aa241x_mission/CoordinateConversion.h>
 
 #include "geodetic_trans.hpp"
 
@@ -47,7 +48,8 @@ public:
 
 	// TODO: need to remember the proper syntax for this
 	// but this should be a service to compute the Lake Lag ENU position of a given GPS position
-	gpsToLakeLagENUService();
+	bool serviceGPStoLakeLagENU(aa241x_mission::CoordinateConversion::Request &req,
+		aa241x_mission::CoordinateConversion::Response &res);
 
 	// the main function to run the node
 	int run();
@@ -109,6 +111,8 @@ private:
 	ros::Publisher _measurement_pub;	// simulated sensor "measurement"
 	ros::Publisher _mission_state_pub;	// the current mission state
 
+	// services
+	ros::ServiceServer _coord_conversion_srv;
 
 	// callbacks
 	void stateCallback(const mavros_msgs::State::ConstPtr& msg);
@@ -158,6 +162,9 @@ _generator(ros::Time::now().toSec())
 	// advertise publishers
 	_measurement_pub = _nh.advertise<aa241x_mission::SensorMeasurement>("measurement", 10);
 	_mission_state_pub = _nh.advertise<aa241x_mission::MissionState>("mission_state", 10);
+
+	// advertise coordinate conversion
+	_coord_conversion_srv = _nh.advertiseService("gps_to_lake_lag", &MissionNode::serviceGPStoLakeLagENU, this);
 }
 
 void MissionNode::stateCallback(const mavros_msgs::State::ConstPtr& msg) {
@@ -347,21 +354,25 @@ int MissionNode::run() {
 }
 
 
-void MissionNode::gpsToLakeLagENUService() {
+bool MissionNode::serviceGPStoLakeLagENU(aa241x_mission::CoordinateConversion::Request &req,
+		aa241x_mission::CoordinateConversion::Response &res) {
 
 	// given a gps lat, lon, alt point
 	// need to convert it to the Lake Lag frame ENU coordinate
 
-	float lat = 0.0f;	// TODO: read these from the service request
-	float lon = 0.0f;
-	float alt = 0.0f;
+	float lat = req.latitude;
+	float lon = req.longitude;
+	float alt = req.altitude;
 	float pos_e, pos_n, pos_u;
 
 	geodetic_trans::lla2enu(_lake_ctr_lat, _lake_ctr_lon, _lake_ctr_alt_wgs84,
-							lat, lon, alt, &pos_e, &pose_n, &pos_u);
+							lat, lon, alt, &pos_e, &pos_n, &pos_u);
 
-	// TODO: set the service response to be populated with pos_e _n and _u
+	res.east = pos_e;
+	res.north = pos_n;
+	res.up = pos_u;
 
+	return true;
 }
 
 
