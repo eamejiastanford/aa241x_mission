@@ -43,13 +43,33 @@ public:
 	// private NH data
 	MissionNode(int mission_index, std::string mission_file);
 
+	// set some optional parameters
+	inline void setLandingGPS(double landing_lat, double landing_lon) {
+		_landing_lat = landing_lat;
+		_landing_lon = landing_lon;
+		_landing_set = true;
+
+		// do the conversion
+		float useless;
+		geodetic_trans::lla2enu(_lake_ctr_lat, _lake_ctr_lon, _lake_ctr_alt_wgs84,
+							landing_lat, landing_lon, 0.0f, &_landing_e, &_landing_e, &useless);
+	};
+
 
 	// TODO: any services to broadcast (NOTE: need to figure out what services might be neded)
 
-	// TODO: need to remember the proper syntax for this
-	// but this should be a service to compute the Lake Lag ENU position of a given GPS position
 	bool serviceGPStoLakeLagENU(aa241x_mission::CoordinateConversion::Request &req,
 		aa241x_mission::CoordinateConversion::Response &res);
+
+	/**
+	 * service to request the landing position (position of the "truckbed") in
+	 * the Lake Lag ENU frame
+	 * @param  req service request (empty)
+	 * @param  res service response
+	 * @return     true if successfully able to provide data
+	 */
+	bool serviceRequestLandingPosition(aa241x_mission::RequestLandingPosition::Request &req,
+		aa241x_mission::RequestLandingPosition::Response &res);
 
 	// the main function to run the node
 	int run();
@@ -96,6 +116,13 @@ private:
 	float _n_offset = NAN;
 	float _u_offset = NAN;
 	bool _lake_offset_computed = false;
+
+	// landing coordinates
+	double _landing_lat = 0.0;
+	double _landing_lon = 0.0;
+	float _landing_e = 0.0f;
+	float _landing_n = 0.0f;
+	bool _landing_set = false;
 
 	// data
 	geometry_msgs::PoseStamped _current_local_position;		// most recent local position info
@@ -375,6 +402,23 @@ bool MissionNode::serviceGPStoLakeLagENU(aa241x_mission::CoordinateConversion::R
 	return true;
 }
 
+bool MissionNode::serviceRequestLandingPosition(aa241x_mission::RequestLandingPosition::Request &req,
+		aa241x_mission::RequestLandingPosition::Response &res) {
+
+	// return the saved information for the landing position of the drone
+	// NOTE: if GPS coordinates not set in the launch file -> return false
+
+	if (!_landing_set) {
+		return false;
+	}
+
+	// the 2D coordinates to the landing location
+	res.east = _landing_e;
+	res.north = landing_n;
+
+	return true;
+}
+
 
 int main(int argc, char **argv) {
 
@@ -387,6 +431,7 @@ int main(int argc, char **argv) {
 	// TODO: determine settings
 	int mission_index = 0;
 	std::string mission_file;
+	double landing_lat, landing_lon;
 
 	private_nh.param("mission_index", mission_index, 0);
 	if (!private_nh.getParam("mission_file", mission_file)) {
@@ -395,6 +440,11 @@ int main(int argc, char **argv) {
 
 	// create the node
 	MissionNode node(mission_index, mission_file);
+
+	// handling the optional parameters
+	if (private_nh.getParam("landing_lat", landing_lat) || private_nh.getParam("landing_lon", landing_lon)) {
+		node.setLandingGPS(landing_lat, landing_lon);
+	}
 
 	// run the node
 	return node.run();
