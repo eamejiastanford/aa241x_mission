@@ -140,6 +140,7 @@ private:
 
 	// services
 	ros::ServiceServer _coord_conversion_srv;
+	ros::ServiceServer _landing_loc_srv;
 
 	// callbacks
 	void stateCallback(const mavros_msgs::State::ConstPtr& msg);
@@ -190,8 +191,9 @@ _generator(ros::Time::now().toSec())
 	_measurement_pub = _nh.advertise<aa241x_mission::SensorMeasurement>("measurement", 10);
 	_mission_state_pub = _nh.advertise<aa241x_mission::MissionState>("mission_state", 10);
 
-	// advertise coordinate conversion
+	// advertise coordinate conversion and landing location
 	_coord_conversion_srv = _nh.advertiseService("gps_to_lake_lag", &MissionNode::serviceGPStoLakeLagENU, this);
+	_landing_loc_srv = _nh.advertiseService("lake_lag_landing_loc", &MissionNode::serviceRequestLandingPosition, this);
 }
 
 void MissionNode::stateCallback(const mavros_msgs::State::ConstPtr& msg) {
