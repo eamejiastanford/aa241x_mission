@@ -45,17 +45,7 @@ public:
 	MissionNode(int mission_index, std::string mission_file);
 
 	// set some optional parameters
-	inline void setLandingGPS(double landing_lat, double landing_lon) {
-		_landing_lat = landing_lat;
-		_landing_lon = landing_lon;
-		_landing_set = true;
-
-		// do the conversion
-		float useless;
-		geodetic_trans::lla2enu(_lake_ctr_lat, _lake_ctr_lon, _lake_ctr_alt_wgs84,
-							landing_lat, landing_lon, 0.0f, &_landing_e, &_landing_e, &useless);
-	};
-
+	void setLandingGPS(double landing_lat, double landing_lon);
 
 	// TODO: any services to broadcast (NOTE: need to figure out what services might be neded)
 
@@ -196,6 +186,17 @@ _generator(ros::Time::now().toSec())
 	_coord_conversion_srv = _nh.advertiseService("gps_to_lake_lag", &MissionNode::serviceGPStoLakeLagENU, this);
 	_landing_loc_srv = _nh.advertiseService("lake_lag_landing_loc", &MissionNode::serviceRequestLandingPosition, this);
 }
+
+void MissionNode::setLandingGPS(double landing_lat, double landing_lon) {
+		_landing_lat = landing_lat;
+		_landing_lon = landing_lon;
+		_landing_set = true;
+
+		// do the conversion
+		float useless;
+		geodetic_trans::lla2enu(_lake_ctr_lat, _lake_ctr_lon, _lake_ctr_alt_wgs84,
+							landing_lat, landing_lon, 0.0f, &_landing_e, &_landing_n, &useless);
+};
 
 void MissionNode::stateCallback(const mavros_msgs::State::ConstPtr& msg) {
 	_current_state = *msg;
@@ -445,8 +446,11 @@ int main(int argc, char **argv) {
 	MissionNode node(mission_index, mission_file);
 
 	// handling the optional parameters
-	if (private_nh.getParam("landing_lat", landing_lat) || private_nh.getParam("landing_lon", landing_lon)) {
+	if (private_nh.getParam("landing_lat", landing_lat) && private_nh.getParam("landing_lon", landing_lon)) {
 		node.setLandingGPS(landing_lat, landing_lon);
+		ROS_INFO("landing position coordinates: (%0.2f, %0.2f)", landing_lat, landing_lon);
+	} else {
+		ROS_INFO("[AA241x] no landing position set");
 	}
 
 	// run the node
