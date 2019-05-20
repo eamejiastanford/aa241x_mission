@@ -27,6 +27,7 @@
 #include <aa241x_mission/SensorMeasurement.h>
 #include <aa241x_mission/PersonEstimate.h>
 #include <aa241x_mission/CoordinateConversion.h>
+#include <aa241x_mission/RequestLandingPosition.h>
 
 #include "geodetic_trans.hpp"
 
@@ -416,7 +417,7 @@ bool MissionNode::serviceRequestLandingPosition(aa241x_mission::RequestLandingPo
 
 	// the 2D coordinates to the landing location
 	res.east = _landing_e;
-	res.north = landing_n;
+	res.north = _landing_n;
 
 	return true;
 }
