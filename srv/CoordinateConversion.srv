@@ -1,0 +1,7 @@
+float64 latitude	# latitude of point to convert in decimal degrees
+float64 longitude	# longitude of the point to convert in decimal degrees
+float32 altitude	# altitude of the point to convert in meters AMSL
+---
+float32 east	# east coordinate in Lake Lag frame in meters
+float32 north	# north coordinate in Lake Lag frame in meters
+float32 up		# up coordinate in Lake Lag frame in meters

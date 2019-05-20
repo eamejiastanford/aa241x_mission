@@ -1,10 +1,14 @@
 <launch>
 
 	<arg name="mission_index" default="1" doc="index of the desired mission to run" />
+	<arg name="landing_lat" default="" doc="GPS latitude of the landing location in decimal degrees" />
+	<arg name="landing_lon" default="" doc="GPS longitude of the landing location in decimal degrees" />
 
 	<node pkg="aa241x_mission" type="aa241x_mission_node" name="aa241x_mission_node" output="screen">
 		<param name="mission_index" value="$(arg mission_index)" />
 		<param name="mission_file" value="$(find aa241x_mission)/missions/id$(arg mission_index).mission" type="str" />
+		<param name="landing_lat" value="$(arg landing_lat)" type="double" />
+		<param name="landing_lon" value="$(arg landing_lon)" type="double" />
 	</node>
 
 </launch>

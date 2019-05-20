@@ -2,9 +2,11 @@
 
 This package contains the nodes to control the mission for Spring 2019's AA241x.  This README is broken down into the following sections:
 
- - [Getting Started](#getting-started) - to help with getting you up and running with the mission.
+ - [Getting Started](#getting-started) - to help with getting you up and running with the mission, how to include the mission in your launch files, and how to set some of the parameters for the mission.
 
  - [Publishers / Subscribers](#publishers--subscribers) - more detailed explanation of the topic and information the mission publishes and subscribes to.
+
+ - [Services](#services) - detailed explanation of the service provided by the AA241x mission node to provide the landing position in lake lag frame coordinates.
 
  - [Rules and Equations](#rules-and-equations) - a summary of the rules and equations that define the Spring 2019 AA241x Mission
 
@@ -31,11 +33,15 @@ source devel/setup.bash
 roslaunch aa241x_mission aa241x_mission.launch
 ```
 
-The mission node has a single parameter that can be adjusted: the `mission_index`, which specifies which of the [mission files](#mission-files) to load for the given flight.  This parameter is also exposed through the launch file as a launch file argument.  For example, the following example specifies the `mission_index` argument to be `1` using `roslaunch`:
+The mission node has a three parameters that can be adjusted:
+
+ - `mission_index` - specifies which of the [mission files](#mission-files) to load for the given flight.  This parameter is also exposed through the launch file as a launch file argument.  For example, the following example specifies the `mission_index` argument to be `1` using `roslaunch`:
 
 ```sh
 roslaunch aa241x_mission aa241x_mission.launch mission_index:=1
 ```
+
+ - `landing_lat` and `landing_lon` - specify the GPS latitude and longitude of the truckbed in decimal degrees.  These two parameters have to both get set in order to be able to query the landing position from the mission node.  These parameters are also explosed through the launch file as launch file arguments and can be specified in the same way as the `mission_index` parameter.  **Note:** see [the section below](#getting-landing-coordinates) for some suggestions for how to get the coordinates of the landing position when you are doing tests yourself.
 
 #### Including the Mission ####
 
@@ -44,10 +50,13 @@ You may find that you will want to create your own custom launch files to launch
 ```xml
 <include file="$(find aa241x_mission)/launch/aa241x_mission.launch" >
     <arg name="mission_index" value="1" />
+    <!-- NOTE: these are example coordinates, make sure you specify your desired landing location coordinates! -->
+    <arg name="landing_lat" value="37.423767" />
+    <arg name="landing_lon" value="-122.177559" />
 </include>
 ```
 
-**Note:** the launch file arguments can also be specified with the `<include>` tag as shown above with the `mission_index` argument being specified to a given value.
+**Note:** the launch file arguments can also be specified with the `<include>` tag as shown above with the `mission_index`, `landing_lat`, and `landing_lon` arguments being specified to a given value.
 
 ### Communicating with PX4 ###
 
@@ -123,6 +132,63 @@ The mission node subscribes to the following AA241x Mission related topics:
      + `n` - the North coordinate of the measurement in [m] in the Lake Lag ENU frame
      + `e` - the East coordinate of the measurement in [m] in the Lake Lag ENU frame
 
+## Services ##
+
+Services are used by the AA241x mission node as ways for you to request specific information from the mission node.  Currently the key service to be aware of is the service to request the Lake Lag frame coordinates of the landing position specified in the launch file as GPS points.
+
+The service is advertised under the topic name: `"lake_lag_landing_loc"`.
+
+To use the service you will need to: 
+
+ 1. define a service client as a member variable:
+
+```c++
+class MissionNode {
+     ...
+
+private:
+     ...
+     ros::ServiceClient _landing_loc_client;
+     ...
+};
+```
+
+
+ 2. register the service client (recommended to be done in your constructor after your subscribers):
+
+```c++
+MissionNode::MissionNode() {
+     ...
+     _landing_loc_client = _nh.serviceClient<aa241x_mission::RequestLandingPosition>("lake_lag_landing_loc");
+     ...
+}
+```
+
+ 3. Request the landing position (recommended to be done just before your `while (ros::ok())` loop):
+
+```c++
+int MissionNode::run() {
+     ...
+     // get the landing position
+     aa241x_mission::RequestLandingPosition srv;
+     if (_landing_loc_client.call(srv)) {
+          // NOTE: saving the landing East and North coordinates to class member variables
+          _landing_e = srv.response.east;
+          _landing_n = srv.response.north;
+          ROS_INFO("landing coordinate: (%0.2f, %0.2f)", _landing_n, _landing_e);
+     } else {
+          ROS_ERROR("unable to get landing location in Lake Lag frame!");
+     }
+     ...
+     while (ros::ok()) {
+          ...
+     }
+     ...
+}
+```
+
+**Note:** this has been done for you in the most up to date version of `mission_node.cpp` file in `aa241x_commander`.
+
 ## Rules and Equations ##
 
 All the settings and behavior of the mission is outlined in the class presentation and this package merely implements those rules.  Here is a quick recap on some of the more important metric:
@@ -175,6 +241,13 @@ For a more detailed explanation of ROS, the elements of a package, and some of t
 
 You may find that you will want to have some custom messages of your own.  If that is the case, make sure to read through [this tutorial](http://wiki.ros.org/ROS/Tutorials/CreatingMsgAndSrv) on creating and using custom messages.
 
+### Getting Landing Coordinates ###
+
+There a couple options for doing this:
+
+ 1. open Google Maps on your phone and long press on approximately where your blue dot is and that should bring up a pin with the coordinates of your location
+
+ 2. **This is the method we will be using:** download an app called `GPS Test` (Android only) and use the latitude/longitude position it specifies with your phone over or next to the landing platform.  The app shows the current error in the position estimate, so feel free to wait a little bit for the error to be a reasonable value (~1-2m).
 
 ## Troubleshooting ##
 
