@@ -299,7 +299,7 @@ void MissionNode::makeMeasurement() {
 
 	// get the sensor distribution based on the equation
 	float sensor_std = _sensor_stddev_a + h * _sensor_stddev_b;
-	std::normal_distribution<float> pos_distribution(0, sensor_std);
+	std::normal_distribution<float> pos_distribution(0, sqrt(sensor_std));
 
 	// the measurement message
 	aa241x_mission::SensorMeasurement meas;
