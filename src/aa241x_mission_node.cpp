@@ -93,6 +93,7 @@ private:
 
 	// mission monitoring
 	bool _in_mission = false;		// true if mission is running
+	bool _entered_area = false;		// true if within the operating bounds
 	double _mission_time = 0.0;		// time since mission started in [sec]
 	float _mission_score = 0.0;		// the current score
 
@@ -261,6 +262,47 @@ void MissionNode::localPosCallback(const geometry_msgs::PoseStamped::ConstPtr& m
 
 	// set the current position information to be the lake local position
 	_current_local_position = local_pos;
+
+	// check to see if within the appropriate bounds
+	float x = local_pose.pose.position.x;
+	float y = local_pose.pose.position.y;
+	float d_from_center = sqrt(x*x + y*y);
+
+	// if haven't entered the "play area" check if we have (and update accordingly)
+	if (!_entered_area) {
+		// NOTE: have a little bit of margin to account for any GPS noise
+		if (d_from_center <= (_lake_radius - 5)) {
+			_entered_area = true;
+		}
+
+	} else {	// we are in the "play area" and need to check if they violate the OOB conditions
+
+		// if we are above 30m -> going to assume we are searching and therefore
+		// need to check the OOB condition
+		//
+		// if we are < 30m -> assume going for a landing and allow the OOB since
+		// landing area may not be within bounds
+		if (local_pos.pose.position.z >= _sensor_min_h && d_from_center > _lake_radius) {
+			// mark mission as failed (exit mission state and set score to 0)
+			_in_mission = false;
+			_mission_score = 0.0f;
+			_current_state = aa241x_mission::MissionState::MISSION_FAILED_OOB;
+
+			// also immediately update the mission state
+			publishMissionState();
+		}
+
+	}
+
+	// if have exceeded the height threshold, immediately fail the mission
+	if (local_pose.pose.position.z > _max_alt) {
+		_in_mission = false;
+		_mission_score = 0.0f;
+		_current_state = aa241x_mission::MissionState::MISSION_FAILED_OOB;
+
+		// also immediately update the mission state
+		publishMissionState();
+	}
 }
 
 void MissionNode::personFoundCallback(const aa241x_mission::PersonEstimate::ConstPtr& msg) {
@@ -271,6 +313,11 @@ void MissionNode::personFoundCallback(const aa241x_mission::PersonEstimate::Cons
 		return;
 	}
 	*/
+
+	// don't score anything if not in the mission
+	if (!_in_mission) {
+		return;
+	}
 
 	double id = msg->id;
 	float n = msg->n;
