@@ -93,6 +93,8 @@ private:
 
 	// mission monitoring
 	bool _in_mission = false;		// true if mission is running
+	bool _oob_failure = false;		// true if failed due to OOB
+	bool _entered_area = false;		// true if within the operating bounds
 	double _mission_time = 0.0;		// time since mission started in [sec]
 	float _mission_score = 0.0;		// the current score
 
@@ -206,11 +208,14 @@ void MissionNode::setLandingGPS(double landing_lat, double landing_lon) {
 void MissionNode::stateCallback(const mavros_msgs::State::ConstPtr& msg) {
 	_current_state = *msg;
 
-	// check the mission conditions
-	// TODO: determine if there are other conditions
+	// check OFFBOARD based mission condition
 	bool new_state = (_current_state.mode == "OFFBOARD");
 	if (new_state != _in_mission) {
 		publishMissionState();
+
+		// update state related flags to their original state
+		_oob_failure = false;
+		_entered_area = false;
 	}
 	_in_mission = new_state;
 }
@@ -261,6 +266,47 @@ void MissionNode::localPosCallback(const geometry_msgs::PoseStamped::ConstPtr& m
 
 	// set the current position information to be the lake local position
 	_current_local_position = local_pos;
+
+	// check to see if within the appropriate bounds
+	float x = local_pos.pose.position.x;
+	float y = local_pos.pose.position.y;
+	float d_from_center = sqrt(x*x + y*y);
+
+	// if haven't entered the "play area" check if we have (and update accordingly)
+	if (!_entered_area) {
+		// NOTE: have a little bit of margin to account for any GPS noise
+		if (d_from_center <= (_lake_radius - 5)) {
+			_entered_area = true;
+		}
+
+	} else {	// we are in the "play area" and need to check if they violate the OOB conditions
+
+		// if we are above 30m -> going to assume we are searching and therefore
+		// need to check the OOB condition
+		//
+		// if we are < 30m -> assume going for a landing and allow the OOB since
+		// landing area may not be within bounds
+		if (local_pos.pose.position.z >= _sensor_min_h && d_from_center > _lake_radius) {
+			// mark mission as failed (exit mission state and set score to 0)
+			_in_mission = false;
+			_mission_score = 0.0f;
+			_oob_failure = true;
+
+			// also immediately update the mission state
+			publishMissionState();
+		}
+
+	}
+
+	// if have exceeded the height threshold, immediately fail the mission
+	if (local_pos.pose.position.z > _max_alt) {
+		_in_mission = false;
+		_mission_score = 0.0f;
+		_oob_failure = true;
+
+		// also immediately update the mission state
+		publishMissionState();
+	}
 }
 
 void MissionNode::personFoundCallback(const aa241x_mission::PersonEstimate::ConstPtr& msg) {
@@ -271,6 +317,11 @@ void MissionNode::personFoundCallback(const aa241x_mission::PersonEstimate::Cons
 		return;
 	}
 	*/
+
+	// don't score anything if not in the mission
+	if (!_in_mission) {
+		return;
+	}
 
 	double id = msg->id;
 	float n = msg->n;
@@ -380,12 +431,21 @@ void MissionNode::publishMissionState() {
 	mission_state.header.stamp = ros::Time::now();
 	mission_state.mission_time = _mission_time;
 
-	// TODO: add a state machine here to be able to handle the mission changes
+	// handle the mission state information -> if not in mission, depends on what happened
 	if (!_in_mission) {
-		mission_state.mission_state = aa241x_mission::MissionState::MISSION_NOT_STARTED;
+
+		if (_oob_failure) {
+			mission_state.mission_state = aa241x_mission::MissionState::MISSION_FAILED_OOB;
+		} else if (_entered_area) {
+			mission_state.mission_state = aa241x_mission::MissionState::MISSION_FAILED_OTHER;
+		} else {
+			mission_state.mission_state = aa241x_mission::MissionState::MISSION_NOT_STARTED;
+		}
+
 	} else {
 		mission_state.mission_state = aa241x_mission::MissionState::MISSION_RUNNING;
 	}
+	// NOTE: I think we will never have a good trigger for the mission ending, so yea
 
 	// add the offset information
 	mission_state.e_offset = _e_offset;
