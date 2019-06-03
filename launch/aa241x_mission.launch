@@ -11,4 +11,16 @@
 		<param name="landing_lon" value="$(arg landing_lon)" type="double" />
 	</node>
 
+	<!-- a logging node for data for the TAs to confirm scores -->
+	<node pkg="rosbag" type="record" name="scoring_bag"
+		args="-o $(env HOME)/rosbags/scoring_bag
+				/mission_state
+				/measurement
+				/person_found
+				/mavros/state
+				/mavros/global_position/global
+				/mavros/altitude
+				/mavros/time_reference
+				/rosout" />
+
 </launch>
