@@ -389,6 +389,11 @@ void MissionNode::makeMeasurement() {
 	// get the height information into a local variable for readibility
 	float h = _current_local_position.pose.position.z;
 
+	// don't publish a measurement if not heigh enough
+	if (h < _sensor_min_h) {
+		return;
+	}
+
 	// calculate FOV of the sensor
 	float radius = (_sensor_d_mult * h + _sensor_d_offset) / 2.0f;	// [m]
 
