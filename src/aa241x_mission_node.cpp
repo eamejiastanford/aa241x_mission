@@ -96,6 +96,11 @@ private:
 	double _mission_time = 0.0;		// time since mission started in [sec]
 	float _mission_score = 0.0;		// the current score
 
+	// scoring monitoring
+	float _estimate_found_r = 1.0f;			// the radial distance away to consider the person found
+	std::vector<int> _scoring_state;        // scoring state (0: no estimate entered, 1: incorrect estimate, 2: correct estimate)
+	int _number_people_found = 0;           // number of people found correctly
+
 	// mission "people"
 	std::vector<Eigen::Vector2f> _people;	// the positions of the people in the world
 
@@ -259,7 +264,45 @@ void MissionNode::localPosCallback(const geometry_msgs::PoseStamped::ConstPtr& m
 }
 
 void MissionNode::personFoundCallback(const aa241x_mission::PersonEstimate::ConstPtr& msg) {
-	// TODO: update the score
+
+	// TODO: confirm with professor Alonso that no limit on the possible # of people found
+	/*
+	if (_number_people_found == 5) {
+		return;
+	}
+	*/
+
+	double id = msg->id;
+	float n = msg->n;
+	float e = msg->e;
+
+	// if not a valid ID, then return
+	if (id < 0 || id > _people.size()) {
+		return;
+	}
+
+	// get the student estimate
+	Eigen::Vector2f est;
+	est << n, e;
+
+	// get the true location of the person
+	Eigen::Vector2f loc = _people[id];
+
+	// update the score
+	if (_scoring_state[id] == 0) {
+		// Increment the scoring state (so it cannot be scored again)
+		_scoring_state[id] = 1;     // Assume incorrect estimate
+
+		// If within the radius
+		if ((loc - est).norm() <= _estimate_found_r) {
+			// update number of people found and the mission score
+			_number_people_found += 1;
+			_mission_score += 10;
+
+			// mark the estimate as having been correct
+			_scoring_state[id] = 2;   // Correct estimate
+		}
+	}
 }
 
 void MissionNode::loadMission() {
@@ -276,7 +319,8 @@ void MissionNode::loadMission() {
 		// each person is represented by a 3 vector (NED)
 		Eigen::Vector2f loc;
 		loc << n, e;
-		_people.push_back(loc);
+		_people.push_back(loc);			// add the person location to the list
+		_scoring_state.push_back(0);	// add a 0 for this ID in the scoring state vector
 
 		// DEBUG
 		ROS_INFO("adding person at: (%0.2f %0.2f)", n, e);
