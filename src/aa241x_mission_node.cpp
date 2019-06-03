@@ -275,7 +275,7 @@ void MissionNode::localPosCallback(const geometry_msgs::PoseStamped::ConstPtr& m
 	// if haven't entered the "play area" check if we have (and update accordingly)
 	if (!_entered_area) {
 		// NOTE: have a little bit of margin to account for any GPS noise
-		if (d_from_center <= (_lake_radius - 5)) {
+		if (d_from_center <= (_lake_radius - 5) && local_pos.pose.position.z >= _sensor_min_h) {
 			_entered_area = true;
 		}
 
