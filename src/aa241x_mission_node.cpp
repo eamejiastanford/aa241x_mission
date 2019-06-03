@@ -268,8 +268,8 @@ void MissionNode::localPosCallback(const geometry_msgs::PoseStamped::ConstPtr& m
 	_current_local_position = local_pos;
 
 	// check to see if within the appropriate bounds
-	float x = local_pose.pose.position.x;
-	float y = local_pose.pose.position.y;
+	float x = local_pos.pose.position.x;
+	float y = local_pos.pose.position.y;
 	float d_from_center = sqrt(x*x + y*y);
 
 	// if haven't entered the "play area" check if we have (and update accordingly)
@@ -299,7 +299,7 @@ void MissionNode::localPosCallback(const geometry_msgs::PoseStamped::ConstPtr& m
 	}
 
 	// if have exceeded the height threshold, immediately fail the mission
-	if (local_pose.pose.position.z > _max_alt) {
+	if (local_pos.pose.position.z > _max_alt) {
 		_in_mission = false;
 		_mission_score = 0.0f;
 		_oob_failure = true;
