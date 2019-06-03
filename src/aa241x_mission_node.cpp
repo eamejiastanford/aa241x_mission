@@ -93,6 +93,7 @@ private:
 
 	// mission monitoring
 	bool _in_mission = false;		// true if mission is running
+	bool _oob_failure = false;		// true if failed due to OOB
 	bool _entered_area = false;		// true if within the operating bounds
 	double _mission_time = 0.0;		// time since mission started in [sec]
 	float _mission_score = 0.0;		// the current score
@@ -207,11 +208,14 @@ void MissionNode::setLandingGPS(double landing_lat, double landing_lon) {
 void MissionNode::stateCallback(const mavros_msgs::State::ConstPtr& msg) {
 	_current_state = *msg;
 
-	// check the mission conditions
-	// TODO: determine if there are other conditions
+	// check OFFBOARD based mission condition
 	bool new_state = (_current_state.mode == "OFFBOARD");
 	if (new_state != _in_mission) {
 		publishMissionState();
+
+		// update state related flags to their original state
+		_oob_failure = false;
+		_entered_area = false;
 	}
 	_in_mission = new_state;
 }
@@ -286,7 +290,7 @@ void MissionNode::localPosCallback(const geometry_msgs::PoseStamped::ConstPtr& m
 			// mark mission as failed (exit mission state and set score to 0)
 			_in_mission = false;
 			_mission_score = 0.0f;
-			_current_state = aa241x_mission::MissionState::MISSION_FAILED_OOB;
+			_oob_failure = true;
 
 			// also immediately update the mission state
 			publishMissionState();
@@ -298,7 +302,7 @@ void MissionNode::localPosCallback(const geometry_msgs::PoseStamped::ConstPtr& m
 	if (local_pose.pose.position.z > _max_alt) {
 		_in_mission = false;
 		_mission_score = 0.0f;
-		_current_state = aa241x_mission::MissionState::MISSION_FAILED_OOB;
+		_oob_failure = true;
 
 		// also immediately update the mission state
 		publishMissionState();
@@ -427,12 +431,21 @@ void MissionNode::publishMissionState() {
 	mission_state.header.stamp = ros::Time::now();
 	mission_state.mission_time = _mission_time;
 
-	// TODO: add a state machine here to be able to handle the mission changes
+	// handle the mission state information -> if not in mission, depends on what happened
 	if (!_in_mission) {
-		mission_state.mission_state = aa241x_mission::MissionState::MISSION_NOT_STARTED;
+
+		if (_oob_failure) {
+			mission_state.mission_state = aa241x_mission::MissionState::MISSION_FAILED_OOB;
+		} else if (_entered_area) {
+			mission_state.mission_state = aa241x_mission::MissionState::MISSION_FAILED_OTHER;
+		} else {
+			mission_state.mission_state = aa241x_mission::MissionState::MISSION_NOT_STARTED;
+		}
+
 	} else {
 		mission_state.mission_state = aa241x_mission::MissionState::MISSION_RUNNING;
 	}
+	// NOTE: I think we will never have a good trigger for the mission ending, so yea
 
 	// add the offset information
 	mission_state.e_offset = _e_offset;
