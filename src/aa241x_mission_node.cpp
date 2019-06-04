@@ -286,7 +286,7 @@ void MissionNode::localPosCallback(const geometry_msgs::PoseStamped::ConstPtr& m
 	// if haven't entered the "play area" check if we have (and update accordingly)
 	if (!_entered_area) {
 		// NOTE: have a little bit of margin to account for any GPS noise
-		if (d_from_center <= (_lake_radius - 5)) {
+		if (d_from_center <= (_lake_radius - 5) && local_pos.pose.position.z >= _sensor_min_h) {
 			_entered_area = true;
 		}
 
@@ -400,12 +400,17 @@ void MissionNode::makeMeasurement() {
 	// get the height information into a local variable for readibility
 	float h = _current_local_position.pose.position.z;
 
+	// don't publish a measurement if not heigh enough
+	if (h < _sensor_min_h) {
+		return;
+	}
+
 	// calculate FOV of the sensor
 	float radius = (_sensor_d_mult * h + _sensor_d_offset) / 2.0f;	// [m]
 
 	// get the sensor distribution based on the equation
 	float sensor_std = _sensor_stddev_a + h * _sensor_stddev_b;
-	std::normal_distribution<float> pos_distribution(0, sensor_std);
+	std::normal_distribution<float> pos_distribution(0, sqrt(sensor_std));
 
 	// the measurement message
 	aa241x_mission::SensorMeasurement meas;

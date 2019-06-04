@@ -30,7 +30,7 @@ To start the mission with `roslaunch`:
 ```sh
 cd ~/catkin_ws/
 source devel/setup.bash
-roslaunch aa241x_mission mission.launch
+roslaunch aa241x_mission aa241x_mission.launch
 ```
 
 The mission node has a three parameters that can be adjusted:
@@ -38,7 +38,7 @@ The mission node has a three parameters that can be adjusted:
  - `mission_index` - specifies which of the [mission files](#mission-files) to load for the given flight.  This parameter is also exposed through the launch file as a launch file argument.  For example, the following example specifies the `mission_index` argument to be `1` using `roslaunch`:
 
 ```sh
-roslaunch aa241x_mission mission.launch mission_index:=1
+roslaunch aa241x_mission aa241x_mission.launch mission_index:=1
 ```
 
  - `landing_lat` and `landing_lon` - specify the GPS latitude and longitude of the truckbed in decimal degrees.  These two parameters have to both get set in order to be able to query the landing position from the mission node.  These parameters are also explosed through the launch file as launch file arguments and can be specified in the same way as the `mission_index` parameter.  **Note:** see [the section below](#getting-landing-coordinates) for some suggestions for how to get the coordinates of the landing position when you are doing tests yourself.
@@ -48,7 +48,7 @@ roslaunch aa241x_mission mission.launch mission_index:=1
 You may find that you will want to create your own custom launch files to launch all the nodes you may need for successfully executing all parts of the AA241x Mission.  The `mission.launch` file can be included in your own launch file by using the `<include>` tag:
 
 ```xml
-<include file="$(find aa241x_mission)/launch/mission.launch" >
+<include file="$(find aa241x_mission)/launch/aa241x_mission.launch" >
     <arg name="mission_index" value="1" />
     <!-- NOTE: these are example coordinates, make sure you specify your desired landing location coordinates! -->
     <arg name="landing_lat" value="37.423767" />
