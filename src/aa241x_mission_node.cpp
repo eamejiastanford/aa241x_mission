@@ -135,6 +135,7 @@ private:
 	// publishers
 	ros::Publisher _measurement_pub;	// simulated sensor "measurement"
 	ros::Publisher _mission_state_pub;	// the current mission state
+	ros::Publisher _lake_lag_pose_pub;	// the lake lag position as computed by the GPS data
 
 	// services
 	ros::ServiceServer _coord_conversion_srv;
@@ -188,6 +189,7 @@ _generator(ros::Time::now().toSec())
 	// advertise publishers
 	_measurement_pub = _nh.advertise<aa241x_mission::SensorMeasurement>("measurement", 10);
 	_mission_state_pub = _nh.advertise<aa241x_mission::MissionState>("mission_state", 10);
+	_lake_lag_pose_pub = _nh.advertise<geometry_msgs::PoseStamped>("lake_lag_pose", 10);
 
 	// advertise coordinate conversion and landing location
 	_coord_conversion_srv = _nh.advertiseService("gps_to_lake_lag", &MissionNode::serviceGPStoLakeLagENU, this);
@@ -223,32 +225,41 @@ void MissionNode::stateCallback(const mavros_msgs::State::ConstPtr& msg) {
 void MissionNode::gpsCallback(const sensor_msgs::NavSatFix::ConstPtr& msg) {
 	// need to be listening to the raw GPS data for knowing the reference point
 
-	// if we've already handled the offset computation, or don't have a fix yet
-	// then continue
-	if (_lake_offset_computed || msg->status.status < 0) {
-		return;
-	}
 
-	// compute the offset using the geodetic transformations
+	// compute the lake lake frame position
+	float ll_east, ll_north, ll_up;
+
 	double lat = msg->latitude;
 	double lon = msg->longitude;
 	float alt = msg->altitude;
 	geodetic_trans::lla2enu(_lake_ctr_lat, _lake_ctr_lon, _lake_ctr_alt_wgs84,
-							lat, lon, alt, &_e_offset, &_n_offset, &_u_offset);
+							lat, lon, alt, &ll_east, &ll_north, &ll_up);
 
-	// DEBUG
-	ROS_INFO("offset computed as: (%0.2f, %0.2f, %0.2f)", _e_offset, _n_offset, _u_offset);
 
-	// NOTE: this assumes that we are catching (0,0) of the local coordinate
-	// system correctly
-	// TODO: properly test this assumption
+	// if we've already handled the offset computation, or don't have a fix yet
+	// then continue
+	if (!_lake_offset_computed && !(msg->status.status < 0)) {
+		// save the current position value as the offset to the pixhawk local frame
+		_e_offset = ll_east;
+		_n_offset = ll_north;
+		_u_offset = ll_up;
 
-	// publish the mission state with this information
-	publishMissionState();
+		// DEBUG
+		ROS_INFO("offset computed as: (%0.2f, %0.2f, %0.2f)", _e_offset, _n_offset, _u_offset);
 
-	// make as computed
-	_lake_offset_computed = true;
+		// publish the mission state with this information
+		publishMissionState();
 
+		// make as computed
+		_lake_offset_computed = true;
+	}
+
+	// also going to publish the lake lag frame position as computed by GPS
+	geometry_msgs::PoseStamped lake_lag_pose_msg;
+	lake_lag_pose_msg.pose.position.x = ll_east;
+	lake_lag_pose_msg.pose.position.y = ll_north;
+	lake_lag_pose_msg.pose.position.z = ll_up;
+	_lake_lag_pose_pub.publish(lake_lag_pose_msg);
 }
 
 void MissionNode::localPosCallback(const geometry_msgs::PoseStamped::ConstPtr& msg) {
@@ -458,6 +469,7 @@ void MissionNode::publishMissionState() {
 	// publish the information
 	_mission_state_pub.publish(mission_state);
 }
+
 
 int MissionNode::run() {
 
