@@ -479,12 +479,12 @@ void MissionNode::publishMissionState() {
 int MissionNode::run() {
 
 	uint8_t counter = 0;	// needed to rate limit the mission state info
-	ros::Rate rate(1);		// run the loop at 1Hz, which allows mission state at 0.5Hz and measurement at 1/3Hz
+	ros::Rate rate(50);		// run the loop at 1Hz, which allows mission state at 0.5Hz and measurement at 1/3Hz
 	while (ros::ok()) {
 
 		// make a measurement at 1/3 Hz (and if the mission conditions are met)
 		float h = _current_local_position.pose.position.z;
-		if (_in_mission && h >= _sensor_min_h && h <= _sensor_max_h && counter % 3 == 0) {
+		if (_in_mission && h >= _sensor_min_h && h <= _sensor_max_h && counter % 150 == 0) {
 			makeMeasurement();
 		}
 
@@ -492,7 +492,7 @@ int MissionNode::run() {
 		// rate limit this information to a lower rate (e.g. 0.5 Hz)
 		// NOTE: anything that changes the values in the state will cause the
 		// state to be published so that critical data is sent immediately
-		if (counter % 2 == 0) {
+		if (counter % 100 == 0) {
 			publishMissionState();
 		}
 
