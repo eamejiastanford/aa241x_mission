@@ -256,6 +256,7 @@ void MissionNode::gpsCallback(const sensor_msgs::NavSatFix::ConstPtr& msg) {
 
 	// also going to publish the lake lag frame position as computed by GPS
 	geometry_msgs::PoseStamped lake_lag_pose_msg;
+	lake_lag_pose_msg.header.stamp = msg->header.stamp;
 	lake_lag_pose_msg.pose.position.x = ll_east;
 	lake_lag_pose_msg.pose.position.y = ll_north;
 	lake_lag_pose_msg.pose.position.z = ll_up;
