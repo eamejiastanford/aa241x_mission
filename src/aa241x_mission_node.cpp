@@ -189,7 +189,7 @@ _generator(ros::Time::now().toSec())
 	// advertise publishers
 	_measurement_pub = _nh.advertise<aa241x_mission::SensorMeasurement>("measurement", 10);
 	_mission_state_pub = _nh.advertise<aa241x_mission::MissionState>("mission_state", 10);
-	_lake_lag_pose_pub = _nh.advertise<geometry_msgs::PoseStamped>("lake_lag_pose", 10);
+	_lake_lag_pose_pub = _nh.advertise<geometry_msgs::PoseStamped>("geodetic_based_lake_lag_pose", 10);
 
 	// advertise coordinate conversion and landing location
 	_coord_conversion_srv = _nh.advertiseService("gps_to_lake_lag", &MissionNode::serviceGPStoLakeLagENU, this);
