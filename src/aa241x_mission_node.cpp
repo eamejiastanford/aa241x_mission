@@ -124,6 +124,8 @@ private:
 
 	// data
 	geometry_msgs::PoseStamped _current_local_position;		// most recent local position info
+	geometry_msgs::PoseStamped _temp_local;					// needed for offset calc
+	bool _have_temp_local = false;
 	mavros_msgs::State _current_state;						// most recent state info
 
 	// subscribers
@@ -238,11 +240,14 @@ void MissionNode::gpsCallback(const sensor_msgs::NavSatFix::ConstPtr& msg) {
 
 	// if we've already handled the offset computation, or don't have a fix yet
 	// then continue
-	if (!_lake_offset_computed && !(msg->status.status < 0)) {
+	if (!_lake_offset_computed && !(msg->status.status < 0) && _have_temp_local) {
 		// save the current position value as the offset to the pixhawk local frame
-		_e_offset = ll_east;
-		_n_offset = ll_north;
-		_u_offset = ll_up;
+
+		// need to acount for the fact that the drone may have moved from its (0,0,0) position
+
+		_e_offset = ll_east - _temp_local.pose.position.x;
+		_n_offset = ll_north - _temp_local.pose.position.y;
+		_u_offset = ll_up - _temp_local.pose.position.z;
 
 		// DEBUG
 		ROS_INFO("offset computed as: (%0.2f, %0.2f, %0.2f)", _e_offset, _n_offset, _u_offset);
@@ -267,6 +272,8 @@ void MissionNode::localPosCallback(const geometry_msgs::PoseStamped::ConstPtr& m
 
 	// if the offset hasn't been computed, don't publish anything yet
 	if (!_lake_offset_computed) {
+		_temp_local = *msg;
+		_have_temp_local = true;
 		return;
 	}
 
