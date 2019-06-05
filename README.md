@@ -122,7 +122,7 @@ TODO: describe the publishers
      + `u_offset` - offset in the Up direction in [m]
      + `score` - the current score based on the team's position estimates
 
- - `geodetic_based_lake_lag_pse` - this topic, of type [`geometry_msgs::PoseStamped`](http://docs.ros.org/melodic/api/geometry_msgs/html/msg/PoseStamped.html), contains the ENU position of the drone in the Lake Lag frame as computed directly by the GPS coordinates.  NOTE: only the position and header information contain valid information, the orientation data of the message is empty.
+ - `geodetic_based_lake_lag_pose` - this topic, of type [`geometry_msgs::PoseStamped`](http://docs.ros.org/melodic/api/geometry_msgs/html/msg/PoseStamped.html), contains the ENU position of the drone in the Lake Lag frame as computed directly by the GPS coordinates.  NOTE: only the position and header information contain valid information, the orientation data of the message is empty.  You may find it helpful to use this Lake Lag frame ENU position over using the Pixhawk local frame + offset for getting to the landing location as this geodetic based position should have less error.
 
 
 ### Subscribes to ###
