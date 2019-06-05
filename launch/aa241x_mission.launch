@@ -19,6 +19,8 @@
 				/person_found
 				/mavros/state
 				/mavros/global_position/global
+				/geodetic_based_lake_lag_pose
+				/mavros/local_position/pose
 				/mavros/altitude
 				/mavros/time_reference
 				/rosout" />
