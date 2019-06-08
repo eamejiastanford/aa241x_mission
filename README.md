@@ -122,6 +122,9 @@ TODO: describe the publishers
      + `u_offset` - offset in the Up direction in [m]
      + `score` - the current score based on the team's position estimates
 
+ - `geodetic_based_lake_lag_pose` - this topic, of type [`geometry_msgs::PoseStamped`](http://docs.ros.org/melodic/api/geometry_msgs/html/msg/PoseStamped.html), contains the ENU position of the drone in the Lake Lag frame as computed directly by the GPS coordinates.  NOTE: only the position and header information contain valid information, the orientation data of the message is empty.  You may find it helpful to use this Lake Lag frame ENU position over using the Pixhawk local frame + offset for getting to the landing location as this geodetic based position should have less error.
+
+
 ### Subscribes to ###
 
 The mission node subscribes to the following AA241x Mission related topics:
@@ -138,7 +141,7 @@ Services are used by the AA241x mission node as ways for you to request specific
 
 The service is advertised under the topic name: `"lake_lag_landing_loc"`.
 
-To use the service you will need to: 
+To use the service you will need to:
 
  1. define a service client as a member variable:
 

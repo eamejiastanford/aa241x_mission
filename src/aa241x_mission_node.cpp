@@ -93,8 +93,15 @@ private:
 
 	// mission monitoring
 	bool _in_mission = false;		// true if mission is running
+	bool _oob_failure = false;		// true if failed due to OOB
+	bool _entered_area = false;		// true if within the operating bounds
 	double _mission_time = 0.0;		// time since mission started in [sec]
 	float _mission_score = 0.0;		// the current score
+
+	// scoring monitoring
+	float _estimate_found_r = 1.0f;			// the radial distance away to consider the person found
+	std::vector<int> _scoring_state;        // scoring state (0: no estimate entered, 1: incorrect estimate, 2: correct estimate)
+	int _number_people_found = 0;           // number of people found correctly
 
 	// mission "people"
 	std::vector<Eigen::Vector2f> _people;	// the positions of the people in the world
@@ -117,6 +124,8 @@ private:
 
 	// data
 	geometry_msgs::PoseStamped _current_local_position;		// most recent local position info
+	geometry_msgs::PoseStamped _temp_local;					// needed for offset calc
+	bool _have_temp_local = false;
 	mavros_msgs::State _current_state;						// most recent state info
 
 	// subscribers
@@ -128,6 +137,7 @@ private:
 	// publishers
 	ros::Publisher _measurement_pub;	// simulated sensor "measurement"
 	ros::Publisher _mission_state_pub;	// the current mission state
+	ros::Publisher _lake_lag_pose_pub;	// the lake lag position as computed by the GPS data
 
 	// services
 	ros::ServiceServer _coord_conversion_srv;
@@ -181,6 +191,7 @@ _generator(ros::Time::now().toSec())
 	// advertise publishers
 	_measurement_pub = _nh.advertise<aa241x_mission::SensorMeasurement>("measurement", 10);
 	_mission_state_pub = _nh.advertise<aa241x_mission::MissionState>("mission_state", 10);
+	_lake_lag_pose_pub = _nh.advertise<geometry_msgs::PoseStamped>("geodetic_based_lake_lag_pose", 10);
 
 	// advertise coordinate conversion and landing location
 	_coord_conversion_srv = _nh.advertiseService("gps_to_lake_lag", &MissionNode::serviceGPStoLakeLagENU, this);
@@ -201,11 +212,14 @@ void MissionNode::setLandingGPS(double landing_lat, double landing_lon) {
 void MissionNode::stateCallback(const mavros_msgs::State::ConstPtr& msg) {
 	_current_state = *msg;
 
-	// check the mission conditions
-	// TODO: determine if there are other conditions
+	// check OFFBOARD based mission condition
 	bool new_state = (_current_state.mode == "OFFBOARD");
 	if (new_state != _in_mission) {
 		publishMissionState();
+
+		// update state related flags to their original state
+		_oob_failure = false;
+		_entered_area = false;
 	}
 	_in_mission = new_state;
 }
@@ -213,38 +227,53 @@ void MissionNode::stateCallback(const mavros_msgs::State::ConstPtr& msg) {
 void MissionNode::gpsCallback(const sensor_msgs::NavSatFix::ConstPtr& msg) {
 	// need to be listening to the raw GPS data for knowing the reference point
 
-	// if we've already handled the offset computation, or don't have a fix yet
-	// then continue
-	if (_lake_offset_computed || msg->status.status < 0) {
-		return;
-	}
 
-	// compute the offset using the geodetic transformations
+	// compute the lake lake frame position
+	float ll_east, ll_north, ll_up;
+
 	double lat = msg->latitude;
 	double lon = msg->longitude;
 	float alt = msg->altitude;
 	geodetic_trans::lla2enu(_lake_ctr_lat, _lake_ctr_lon, _lake_ctr_alt_wgs84,
-							lat, lon, alt, &_e_offset, &_n_offset, &_u_offset);
+							lat, lon, alt, &ll_east, &ll_north, &ll_up);
 
-	// DEBUG
-	ROS_INFO("offset computed as: (%0.2f, %0.2f, %0.2f)", _e_offset, _n_offset, _u_offset);
 
-	// NOTE: this assumes that we are catching (0,0) of the local coordinate
-	// system correctly
-	// TODO: properly test this assumption
+	// if we've already handled the offset computation, or don't have a fix yet
+	// then continue
+	if (!_lake_offset_computed && !(msg->status.status < 0) && _have_temp_local) {
+		// save the current position value as the offset to the pixhawk local frame
 
-	// publish the mission state with this information
-	publishMissionState();
+		// need to acount for the fact that the drone may have moved from its (0,0,0) position
 
-	// make as computed
-	_lake_offset_computed = true;
+		_e_offset = ll_east - _temp_local.pose.position.x;
+		_n_offset = ll_north - _temp_local.pose.position.y;
+		_u_offset = ll_up - _temp_local.pose.position.z;
 
+		// DEBUG
+		ROS_INFO("offset computed as: (%0.2f, %0.2f, %0.2f)", _e_offset, _n_offset, _u_offset);
+
+		// publish the mission state with this information
+		publishMissionState();
+
+		// make as computed
+		_lake_offset_computed = true;
+	}
+
+	// also going to publish the lake lag frame position as computed by GPS
+	geometry_msgs::PoseStamped lake_lag_pose_msg;
+	lake_lag_pose_msg.header.stamp = msg->header.stamp;
+	lake_lag_pose_msg.pose.position.x = ll_east;
+	lake_lag_pose_msg.pose.position.y = ll_north;
+	lake_lag_pose_msg.pose.position.z = ll_up;
+	_lake_lag_pose_pub.publish(lake_lag_pose_msg);
 }
 
 void MissionNode::localPosCallback(const geometry_msgs::PoseStamped::ConstPtr& msg) {
 
 	// if the offset hasn't been computed, don't publish anything yet
 	if (!_lake_offset_computed) {
+		_temp_local = *msg;
+		_have_temp_local = true;
 		return;
 	}
 
@@ -256,10 +285,94 @@ void MissionNode::localPosCallback(const geometry_msgs::PoseStamped::ConstPtr& m
 
 	// set the current position information to be the lake local position
 	_current_local_position = local_pos;
+
+	// check to see if within the appropriate bounds
+	float x = local_pos.pose.position.x;
+	float y = local_pos.pose.position.y;
+	float d_from_center = sqrt(x*x + y*y);
+
+	// if haven't entered the "play area" check if we have (and update accordingly)
+	if (!_entered_area) {
+		// NOTE: have a little bit of margin to account for any GPS noise
+		if (d_from_center <= (_lake_radius - 5) && local_pos.pose.position.z >= _sensor_min_h) {
+			_entered_area = true;
+		}
+
+	} else {	// we are in the "play area" and need to check if they violate the OOB conditions
+
+		// if we are above 30m -> going to assume we are searching and therefore
+		// need to check the OOB condition
+		//
+		// if we are < 30m -> assume going for a landing and allow the OOB since
+		// landing area may not be within bounds
+		if (local_pos.pose.position.z >= _sensor_min_h && d_from_center > _lake_radius) {
+			// mark mission as failed (exit mission state and set score to 0)
+			_in_mission = false;
+			_mission_score = 0.0f;
+			_oob_failure = true;
+
+			// also immediately update the mission state
+			publishMissionState();
+		}
+
+	}
+
+	// if have exceeded the height threshold, immediately fail the mission
+	if (local_pos.pose.position.z > _max_alt) {
+		_in_mission = false;
+		_mission_score = 0.0f;
+		_oob_failure = true;
+
+		// also immediately update the mission state
+		publishMissionState();
+	}
 }
 
 void MissionNode::personFoundCallback(const aa241x_mission::PersonEstimate::ConstPtr& msg) {
-	// TODO: update the score
+
+	// TODO: confirm with professor Alonso that no limit on the possible # of people found
+	/*
+	if (_number_people_found == 5) {
+		return;
+	}
+	*/
+
+	// don't score anything if not in the mission
+	if (!_in_mission) {
+		return;
+	}
+
+	double id = msg->id;
+	float n = msg->n;
+	float e = msg->e;
+
+	// if not a valid ID, then return
+	if (id < 0 || id > _people.size()) {
+		return;
+	}
+
+	// get the student estimate
+	Eigen::Vector2f est;
+	est << n, e;
+
+	// get the true location of the person
+	Eigen::Vector2f loc = _people[id];
+
+	// update the score
+	if (_scoring_state[id] == 0) {
+		// Increment the scoring state (so it cannot be scored again)
+		_scoring_state[id] = 1;     // Assume incorrect estimate
+
+		// If within the radius
+		if ((loc - est).norm() <= _estimate_found_r) {
+			// update number of people found and the mission score
+			_number_people_found += 1;
+			_mission_score += 10;
+
+			// mark the estimate as having been correct
+			_scoring_state[id] = 2;   // Correct estimate
+		}
+	}
 }
 
 void MissionNode::loadMission() {
@@ -276,7 +389,8 @@ void MissionNode::loadMission() {
 		// each person is represented by a 3 vector (NED)
 		Eigen::Vector2f loc;
 		loc << n, e;
-		_people.push_back(loc);
+		_people.push_back(loc);			// add the person location to the list
+		_scoring_state.push_back(0);	// add a 0 for this ID in the scoring state vector
 
 		// DEBUG
 		ROS_INFO("adding person at: (%0.2f %0.2f)", n, e);
@@ -293,6 +407,11 @@ void MissionNode::makeMeasurement() {
 
 	// get the height information into a local variable for readibility
 	float h = _current_local_position.pose.position.z;
+
+	// don't publish a measurement if not heigh enough
+	if (h < _sensor_min_h) {
+		return;
+	}
 
 	// calculate FOV of the sensor
 	float radius = (_sensor_d_mult * h + _sensor_d_offset) / 2.0f;	// [m]
@@ -336,12 +455,21 @@ void MissionNode::publishMissionState() {
 	mission_state.header.stamp = ros::Time::now();
 	mission_state.mission_time = _mission_time;
 
-	// TODO: add a state machine here to be able to handle the mission changes
+	// handle the mission state information -> if not in mission, depends on what happened
 	if (!_in_mission) {
-		mission_state.mission_state = aa241x_mission::MissionState::MISSION_NOT_STARTED;
+
+		if (_oob_failure) {
+			mission_state.mission_state = aa241x_mission::MissionState::MISSION_FAILED_OOB;
+		} else if (_entered_area) {
+			mission_state.mission_state = aa241x_mission::MissionState::MISSION_FAILED_OTHER;
+		} else {
+			mission_state.mission_state = aa241x_mission::MissionState::MISSION_NOT_STARTED;
+		}
+
 	} else {
 		mission_state.mission_state = aa241x_mission::MissionState::MISSION_RUNNING;
 	}
+	// NOTE: I think we will never have a good trigger for the mission ending, so yea
 
 	// add the offset information
 	mission_state.e_offset = _e_offset;
@@ -355,23 +483,30 @@ void MissionNode::publishMissionState() {
 	_mission_state_pub.publish(mission_state);
 }
 
+
 int MissionNode::run() {
 
 	uint8_t counter = 0;	// needed to rate limit the mission state info
-	ros::Rate rate(1);		// run the loop at 1Hz, which allows mission state at 0.5Hz and measurement at 1/3Hz
+	ros::Rate rate(10);		// run the loop at 1Hz, which allows mission state at 0.5Hz and measurement at 1/3Hz
+	double last_measurement_time = ros::Time::now().toSec();	// time of the last measurement
+
 	while (ros::ok()) {
 
 		// make a measurement at 1/3 Hz (and if the mission conditions are met)
 		float h = _current_local_position.pose.position.z;
-		if (_in_mission && h >= _sensor_min_h && h <= _sensor_max_h && counter % 3 == 0) {
+		double current_time = ros::Time::now().toSec();
+		if (_in_mission && h >= _sensor_min_h && h <= _sensor_max_h && ((current_time - last_measurement_time) >= (3.0f))) {
 			makeMeasurement();
+
+			// update time on measurement
+			last_measurement_time = current_time;
 		}
 
 		// publish the mission state information
 		// rate limit this information to a lower rate (e.g. 0.5 Hz)
 		// NOTE: anything that changes the values in the state will cause the
 		// state to be published so that critical data is sent immediately
-		if (counter % 2 == 0) {
+		if (counter % 20 == 0) {
 			publishMissionState();
 		}
 
